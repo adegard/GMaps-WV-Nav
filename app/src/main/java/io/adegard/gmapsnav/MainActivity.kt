@@ -51,7 +51,6 @@ import android.widget.EditText
 import android.widget.Toast
 import org.json.JSONObject
 import java.net.URLEncoder
-import java.util.regex.Pattern
 
 class MainActivity : Activity() {
     private var mapsWebView: WebView? = null
@@ -765,14 +764,14 @@ class MainActivity : Activity() {
         private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) " +
             "Chrome/138.0.0.0 Mobile Safari/537.36"
 
-        // Matches "@-33.8569,151.2152" or "-33.8569,-151.2152" style coordinates
-        private val COORD_REGEX = Pattern.compile("(-?\\d+\\.\\d+),\\s?(-?\\d+\\.\\d+)")
+        // Matches "-33.8569,151.2152" or "@-33.8569,-151.2152" style coordinates
+        private val COORD_REGEX = Regex("(-?\\d+\\.\\d+),\\s?(-?\\d+\\.\\d+)")
 
         private var locationListenerGPS: LocationListener? = null
         private val canUseLocation = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
         private var locationRequestCount = 0
 
-        fun coordinatesRegex(): Pattern = COORD_REGEX
+        fun coordinatesRegex(): Regex = COORD_REGEX
     }
 }
 
