@@ -262,12 +262,10 @@ class MainActivity : Activity() {
                     }
                     "google.navigation" -> {
                         // Handoff to the Google Maps app for turn-by-turn navigation
-                        try {
-                            startActivity(Intent(Intent.ACTION_VIEW, request.url))
-                            return true
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Unable to launch navigation", e)
-                        }
+                        val ssp = request.url.schemeSpecificPart ?: ""
+                        val dest = ssp.removePrefix("?").substringBefore("&").removePrefix("q=")
+                        launchTurnByTurn(Uri.decode(dest))
+                        return true
                     }
                     "waze" -> {
                         try {
@@ -289,7 +287,19 @@ class MainActivity : Activity() {
                                 startActivity(parsed.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                                 return true
                             } catch (e: Exception) {
-                                Log.w(TAG, "Unable to launch intent: " + request.url)
+                                Log.w(TAG, "Unable to launch intent: " + request.url, e)
+                                // Retry forcing the underlying maps link into the Maps app
+                                val data = parsed.data
+                                if (data != null && data.scheme == "https") {
+                                    try {
+                                        startActivity(
+                                            Intent(Intent.ACTION_VIEW, data).setPackage(MAPS_PACKAGE)
+                                        )
+                                        return true
+                                    } catch (e2: Exception) {
+                                        Log.w(TAG, "Unable to launch maps intent", e2)
+                                    }
+                                }
                             }
                         }
                         return true // Block the unparseable intent scheme
@@ -497,8 +507,9 @@ class MainActivity : Activity() {
     }
 
     /**
-     * Launches turn-by-turn navigation. Prefers the Google Maps app (google.navigation:),
-     * falls back to an in-app route preview that can hand off to the Maps app.
+     * Launches turn-by-turn navigation. Tries the Google Maps app through
+     * multiple launch strategies and only falls back to an in-app route
+     * preview if the user explicitly asks for it.
      */
     private fun startTurnByTurnNavigation(destination: String) {
         val trimmed = destination.trim()
@@ -506,18 +517,71 @@ class MainActivity : Activity() {
             Toast.makeText(context, R.string.error_no_destination, Toast.LENGTH_SHORT).show()
             return
         }
-        val encoded = URLEncoder.encode(trimmed, "UTF-8")
-        val navUri = Uri.parse("google.navigation:q=$encoded&mode=d")
-        val intent = Intent(Intent.ACTION_VIEW, navUri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        try {
-            if (intent.resolveActivity(packageManager) != null) {
-                startActivity(intent)
-                return
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Unable to launch google.navigation intent", e)
+        if (launchTurnByTurn(trimmed)) {
+            return
         }
-        Log.d(TAG, "Google Maps app not found, loading in-app route preview")
+        Log.d(TAG, "No navigation app found for: $trimmed")
+        AlertDialog.Builder(context)
+            .setTitle(R.string.title_no_nav_app)
+            .setMessage(R.string.text_no_nav_app)
+            .setPositiveButton(R.string.action_route_preview) { _: DialogInterface?, _: Int ->
+                loadRoutePreview(trimmed)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
+            .show()
+    }
+
+    /**
+     * Attempts to hand off to the Google Maps app. Returns true if an app
+     * handled the intent.
+     */
+    private fun launchTurnByTurn(destination: String): Boolean {
+        val trimmed = destination.trim()
+        if (trimmed.isEmpty()) {
+            return false
+        }
+        val encoded = URLEncoder.encode(trimmed, "UTF-8")
+        // Strategy 1: the classic google.navigation scheme (turn-by-turn)
+        val navUri = Uri.parse("google.navigation:q=$encoded&mode=d")
+        if (tryStart(Intent(Intent.ACTION_VIEW, navUri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))) {
+            return true
+        }
+        // Strategy 2: same scheme, forced to the Google Maps app
+        if (tryStart(
+                Intent(Intent.ACTION_VIEW, navUri)
+                    .setPackage(MAPS_PACKAGE)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        ) {
+            return true
+        }
+        // Strategy 3: dir_action=navigate URL opened inside the Google Maps app
+        val dirUri = Uri.parse(
+            "https://www.google.com/maps/dir/?api=1" +
+                "&destination=$encoded" +
+                "&travelmode=driving" +
+                "&dir_action=navigate"
+        )
+        return tryStart(
+            Intent(Intent.ACTION_VIEW, dirUri)
+                .setPackage(MAPS_PACKAGE)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+    }
+
+    private fun tryStart(intent: Intent): Boolean {
+        return try {
+            startActivity(intent)
+            true
+        } catch (e: Exception) {
+            Log.d(TAG, "[navigation] Could not start $intent", e)
+            false
+        }
+    }
+
+    private fun loadRoutePreview(destination: String) {
+        val encoded = URLEncoder.encode(destination, "UTF-8")
         mapsWebView?.loadUrl(
             "https://www.google.com/maps/dir/?api=1" +
                 "&destination=$encoded" +
@@ -759,6 +823,9 @@ class MainActivity : Activity() {
         )
 
         private const val TAG = "GMapsWV"
+
+        // The official Google Maps app package
+        private const val MAPS_PACKAGE = "com.google.android.apps.maps"
 
         // Anonymous User-Agent used by Vanadium
         private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) " +

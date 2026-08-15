@@ -13,9 +13,11 @@ Features
 - Allows toggling of location permission
 - **Turn-by-turn navigation**:
   - Floating "Navigate" button hands the current place/coordinates to the
-    Google Maps app (`google.navigation:`) for real turn-by-turn guidance
-  - If the Maps app is not installed, falls back to an in-app route preview
-    (`dir_action=navigate`) that can hand off to any installed maps app
+    Google Maps app (`google.navigation:`) for real turn-by-turn guidance,
+    trying multiple launch strategies (scheme, explicit Maps package, and a
+    `dir_action=navigate` URL) until one is handled
+  - If no navigation app is installed, you are asked whether to show an in-app
+    route preview instead of silently falling back
   - Intercepts `intent://`, `google.navigation:` and `waze:` links fired by the
     maps page itself (e.g. its "Start" button) and forwards them correctly
 - **Easy place sharing**:

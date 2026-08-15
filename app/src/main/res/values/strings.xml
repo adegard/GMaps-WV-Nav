@@ -17,4 +17,7 @@
     <string name="title_share_place">Share place</string>
     <string name="title_copied_place">Place copied</string>
     <string name="error_no_destination">No destination entered</string>
+    <string name="title_no_nav_app">No navigation app found</string>
+    <string name="text_no_nav_app">No app that can start turn-by-turn navigation (like Google Maps) was found on this device. Would you like to view the route preview inside this app instead?</string>
+    <string name="action_route_preview">Route preview</string>
 </resources>
