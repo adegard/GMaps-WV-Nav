@@ -78,4 +78,5 @@ jobs:
         with:
           name: GMaps WV Nav ${{ github.ref_name }}
           files: GMaps-WV-Nav-*-release.apk
+          overwrite: true
           generate_release_notes: true
