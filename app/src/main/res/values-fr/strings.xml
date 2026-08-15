@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="intent_string">Ouvrir dans une webview restreinte</string>
+    <string name="title_location_permission">Accès à la position</string>
+    <string name="text_location_permission">Merci d’accorder l’accès à la position avant d’appuyer de nouveau sur le bouton.</string>
+    <string name="error_no_gps">Merci d’activer le GPS</string>
+    <string name="no_app_installed">Aucune application installée</string>
+    <string name="title_open_link">Ouvrir le lien</string>
+    <string name="text_open_link">Ouvrir dans le navigateur externe ? %s</string>
+</resources>

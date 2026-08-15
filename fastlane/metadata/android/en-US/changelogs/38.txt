@@ -1,0 +1,5 @@
+* Forked from Divest OS GMaps WV
+* Remove consent popup
+* Remove "Install app" banner
+* Add ability to open place websites
+* Modernized code

@@ -1,0 +1,20 @@
+<resources>
+    <string name="app_name">GMaps WV Nav</string>
+    <string name="intent_string">Open in restricted webview</string>
+    <string name="title_location_permission">Location permission</string>
+    <string name="text_location_permission">Please grant location permission and press button again.</string>
+    <string name="error_no_gps">Please activate GPS</string>
+    <string name="no_app_installed">No app installed</string>
+    <string name="title_open_link">Open link</string>
+    <string name="text_open_link">Open in external browser? %s</string>
+    <string name="fab_navigate">Turn-by-turn navigation</string>
+    <string name="fab_share">Share current place</string>
+    <string name="title_enter_destination">Enter destination</string>
+    <string name="hint_destination">Destination address or coordinates</string>
+    <string name="action_navigate">Navigate</string>
+    <string name="action_share">Share</string>
+    <string name="action_copy">Copy</string>
+    <string name="title_share_place">Share place</string>
+    <string name="title_copied_place">Place copied</string>
+    <string name="error_no_destination">No destination entered</string>
+</resources>

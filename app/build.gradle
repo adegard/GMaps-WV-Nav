@@ -1,0 +1,70 @@
+apply plugin: 'com.android.application'
+apply plugin: 'org.jetbrains.kotlin.android'
+
+android {
+    compileSdk 35
+    def keystorePropertiesFile = rootProject.file("signing/keystore.properties")
+    def keystoreProperties = new Properties()
+    if (keystorePropertiesFile.exists()) {
+        keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+    }
+    signingConfigs {
+        release {
+            storeFile rootProject.file(keystoreProperties['signing.store.file'] ?: 'signing/release.keystore')
+            storePassword keystoreProperties['signing.store.password'] ?: 'gmapsnav-release'
+            keyAlias keystoreProperties['signing.key.alias'] ?: 'gmapsnav'
+            keyPassword keystoreProperties['signing.key.password'] ?: 'gmapsnav-release'
+        }
+    }
+    defaultConfig {
+        applicationId "io.adegard.gmapsnav"
+        minSdkVersion 21
+        targetSdkVersion 35
+        versionCode 100
+        versionName "2.0"
+        resourceConfigurations += [
+            'en',
+            'ar',
+            'bg',
+            'cs',
+            'de',
+            'es',
+            'et',
+            'fi',
+            'fr',
+            'gl',
+            'hr',
+            'in',
+            'it',
+            'pl',
+            'pt',
+            'pt-rBR',
+            'ru',
+            'uk',
+            'zh-rCN'
+        ]
+    }
+    buildTypes {
+        debug {
+            applicationIdSuffix ".debug"
+            minifyEnabled true
+        }
+        release {
+            shrinkResources true
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
+        }
+    }
+    lint {
+        abortOnError false
+    }
+    namespace 'io.adegard.gmapsnav'
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.15.0'
+}
