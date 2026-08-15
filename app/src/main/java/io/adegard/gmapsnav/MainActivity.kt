@@ -261,10 +261,14 @@ class MainActivity : Activity() {
                         return true
                     }
                     "google.navigation" -> {
-                        // Handoff to the Google Maps app for turn-by-turn navigation
+                        // Hand off to the Google Maps app, or fall back to the
+                        // built-in navigation when no external app exists
                         val ssp = request.url.schemeSpecificPart ?: ""
                         val dest = ssp.removePrefix("?").substringBefore("&").removePrefix("q=")
-                        launchTurnByTurn(Uri.decode(dest))
+                        val decoded = Uri.decode(dest)
+                        if (!launchTurnByTurn(decoded)) {
+                            startActivity(NavigationActivity.newIntent(context, decoded))
+                        }
                         return true
                     }
                     "waze" -> {
@@ -507,9 +511,9 @@ class MainActivity : Activity() {
     }
 
     /**
-     * Launches turn-by-turn navigation. Tries the Google Maps app through
-     * multiple launch strategies and only falls back to an in-app route
-     * preview if the user explicitly asks for it.
+     * Launches in-app turn-by-turn navigation. First tries the Google Maps app
+     * through multiple launch strategies, and falls back to the built-in
+     * NavigationActivity when no external navigation app is available.
      */
     private fun startTurnByTurnNavigation(destination: String) {
         val trimmed = destination.trim()
@@ -517,19 +521,7 @@ class MainActivity : Activity() {
             Toast.makeText(context, R.string.error_no_destination, Toast.LENGTH_SHORT).show()
             return
         }
-        if (launchTurnByTurn(trimmed)) {
-            return
-        }
-        Log.d(TAG, "No navigation app found for: $trimmed")
-        AlertDialog.Builder(context)
-            .setTitle(R.string.title_no_nav_app)
-            .setMessage(R.string.text_no_nav_app)
-            .setPositiveButton(R.string.action_route_preview) { _: DialogInterface?, _: Int ->
-                loadRoutePreview(trimmed)
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .create()
-            .show()
+        startActivity(NavigationActivity.newIntent(context, trimmed))
     }
 
     /**
@@ -578,16 +570,6 @@ class MainActivity : Activity() {
             Log.d(TAG, "[navigation] Could not start $intent", e)
             false
         }
-    }
-
-    private fun loadRoutePreview(destination: String) {
-        val encoded = URLEncoder.encode(destination, "UTF-8")
-        mapsWebView?.loadUrl(
-            "https://www.google.com/maps/dir/?api=1" +
-                "&destination=$encoded" +
-                "&travelmode=driving" +
-                "&dir_action=navigate"
-        )
     }
 
     private fun promptForDestination(prefill: String) {

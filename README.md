@@ -3,7 +3,7 @@ GMaps WV Nav
 
 GMaps WV Nav is an improved fork of the [DivestOS GMaps WV](https://github.com/Divested-Mobile/Maps)
 WebView wrapper for using Google Maps without exposing your device, with
-turn-by-turn navigation and easy place sharing added.
+**in-app turn-by-turn navigation** and easy place sharing added.
 
 Features
 --------
@@ -11,15 +11,16 @@ Features
 - Blocks access to Google trackers and other third-party resources
 - Restricts all network requests to HTTPS
 - Allows toggling of location permission
-- **Turn-by-turn navigation**:
-  - Floating "Navigate" button hands the current place/coordinates to the
-    Google Maps app (`google.navigation:`) for real turn-by-turn guidance,
-    trying multiple launch strategies (scheme, explicit Maps package, and a
-    `dir_action=navigate` URL) until one is handled
-  - If no navigation app is installed, you are asked whether to show an in-app
-    route preview instead of silently falling back
-  - Intercepts `intent://`, `google.navigation:` and `waze:` links fired by the
-    maps page itself (e.g. its "Start" button) and forwards them correctly
+- **In-app turn-by-turn navigation** (no navigation app required):
+  - Floating "Navigate" button opens the built-in `NavigationActivity` with the
+    current place/coordinates as the destination
+  - Route is calculated with the public OSRM demo server and drawn on an
+    OpenStreetMap (Leaflet) map
+  - Step-by-step guidance: next-maneuver distance, remaining distance, ETA and
+    speed, with spoken announcements (TTS) and vibration at each maneuver
+  - The destination can be an address (geocoded via Nominatim) or coordinates
+  - Intercepts `google.navigation:` links fired by the maps page itself and
+    hands them to the Google Maps app when present, otherwise navigates in-app
 - **Easy place sharing**:
   - Floating "Share" button shares the current place as a link
     (`https://www.google.com/maps/search/?api=1&query=lat,lng`)
@@ -40,9 +41,9 @@ To build locally:
 
 Downsides
 ---------
-- Turn-by-turn guidance itself runs in the Google Maps app (WebView cannot host
-  the live navigation screen); if the Maps app is missing, only route preview
-  is available in-app
+- The in-app navigation uses the public OSRM demo server
+  (`router.project-osrm.org`), which is rate-limited; for heavy use consider
+  pointing it at a self-hosted OSRM instance
 - WebRTC isn't blocked due to WebView limitations
 - Cache isn't cleared due to resource/data considerations, however could allow
   tracking without other data (cookies)

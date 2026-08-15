@@ -114,6 +114,10 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".NavigationActivity"
+            android:exported="false"
+            android:launchMode="singleTask" />
         <meta-data android:name="android.webkit.WebView.MetricsOptOut"
             android:value="true" />
     </application>

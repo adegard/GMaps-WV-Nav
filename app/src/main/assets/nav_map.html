@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<link rel="stylesheet" href="leaflet/leaflet.css">
+<style>
+    html, body, #map { height: 100%; margin: 0; padding: 0; }
+    #map { background: #aad3df; }
+    .you-icon { background: transparent; border: none; }
+    .dest-icon { background: transparent; border: none; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<script src="leaflet/leaflet.js"></script>
+<script>
+var map = L.map('map', { zoomControl: false }).setView([20, 0], 2);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+}).addTo(map);
+
+var routeLine = null;
+var destMarker = null;
+var youMarker = null;
+var currentPos = null;
+var manualMode = false;
+
+var posIcon = L.divIcon({
+    className: 'you-icon',
+    html: '<svg class="you-svg" width="30" height="30" viewBox="0 0 30 30">' +
+        '<g transform="translate(15,15)">' +
+        '<path d="M0 -12 L7 8 L0 4 L-7 8 Z" fill="#1565c0" stroke="#ffffff" stroke-width="2"/>' +
+        '<circle cx="0" cy="0" r="3" fill="#ffffff"/>' +
+        '</g></svg>',
+    iconSize: [30, 30],
+    iconAnchor: [15, 15]
+});
+
+var destIcon = L.divIcon({
+    className: 'dest-icon',
+    html: '<svg width="32" height="42" viewBox="0 0 32 42">' +
+        '<path d="M16 0 C7 0 0 7 0 16 C0 29 16 42 16 42 C16 42 32 29 32 16 C32 7 25 0 16 0 Z" fill="#d32f2f" stroke="#ffffff" stroke-width="2"/>' +
+        '<circle cx="16" cy="16" r="6" fill="#ffffff"/>' +
+        '</svg>',
+    iconSize: [32, 42],
+    iconAnchor: [16, 40]
+});
+
+function navBridge() {
+    try {
+        if (window.NavBridge) { return window.NavBridge; }
+    } catch (e) {}
+    return null;
+}
+
+map.on('dragstart', function () { manualMode = true; var b = navBridge(); if (b) { try { b.setManualMode(); } catch (e) {} } });
+map.on('zoomstart', function () { manualMode = true; var b = navBridge(); if (b) { try { b.setManualMode(); } catch (e) {} } });
+
+window.mapApi = {
+    showRoute: function (coords) {
+        if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+        var latlngs = coords.map(function (p) { return [p[1], p[0]]; });
+        if (latlngs.length > 1) {
+            routeLine = L.polyline(latlngs, { color: '#1565c0', weight: 6, opacity: 0.85, lineJoin: 'round' }).addTo(map);
+            map.fitBounds(routeLine.getBounds(), { padding: [50, 50], maxZoom: 16 });
+        }
+    },
+    setDestination: function (lat, lng) {
+        if (destMarker) { map.removeLayer(destMarker); destMarker = null; }
+        destMarker = L.marker([lat, lng], { icon: destIcon }).addTo(map);
+    },
+    updatePosition: function (lat, lng, bearing) {
+        currentPos = [lat, lng];
+        if (!youMarker) { youMarker = L.marker(currentPos, { icon: posIcon, zIndexOffset: 1000 }).addTo(map); }
+        youMarker.setLatLng(currentPos);
+        if (bearing != null) {
+            var el = youMarker.getElement();
+            if (el) {
+                var svg = el.querySelector('.you-svg');
+                if (svg) { svg.setAttribute('style', 'transform: rotate(' + bearing + 'deg)'); }
+            }
+        }
+        if (!manualMode && map.getZoom() < 15) { map.setView(currentPos, 16); }
+    },
+    recenter: function () {
+        manualMode = false;
+        if (currentPos) { map.setView(currentPos, Math.max(map.getZoom(), 16)); }
+    },
+    clear: function () {
+        if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+        if (destMarker) { map.removeLayer(destMarker); destMarker = null; }
+        if (youMarker) { map.removeLayer(youMarker); youMarker = null; }
+        currentPos = null;
+    }
+};
+
+var b = navBridge();
+if (b) { try { b.onMapReady(); } catch (e) {} }
+</script>
+</body>
+</html>

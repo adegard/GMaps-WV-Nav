@@ -16,6 +16,10 @@
    public *;
 }
 
+-keepclassmembers class io.adegard.gmapsnav.NavigationActivity$NavBridge {
+   public *;
+}
+
 # Uncomment this to preserve the line number information for
 # debugging stack traces.
 #-keepattributes SourceFile,LineNumberTable
