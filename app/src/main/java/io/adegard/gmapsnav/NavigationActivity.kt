@@ -22,6 +22,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
@@ -33,6 +34,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.speech.tts.TextToSpeech
 import android.util.Log
+import android.view.ViewGroup
 import android.view.Window
 import android.view.WindowManager
 import android.webkit.JavascriptInterface
@@ -87,6 +89,7 @@ class NavigationActivity : Activity() {
     private var arrived = false
     private var lastPosition: Pair<Double, Double>? = null
     private var lastBearing = 0f
+    private var lastLocation: Location? = null
 
     private val handler = Handler(Looper.getMainLooper())
 
@@ -99,55 +102,11 @@ class NavigationActivity : Activity() {
         requestWindowFeature(Window.FEATURE_NO_TITLE)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_navigation)
-
-        tvInstruction = findViewById(R.id.tvInstruction)
-        tvManeuverDistance = findViewById(R.id.tvManeuverDistance)
-        tvSub = findViewById(R.id.tvSub)
-        arrivalPanel = findViewById(R.id.arrivalPanel)
-        tvArrivalAddress = findViewById(R.id.tvArrivalAddress)
-        findViewById<Button>(R.id.btnDone).setOnClickListener { finish() }
-        findViewById<Button>(R.id.btnStop).setOnClickListener { finish() }
-        findViewById<ImageButton>(R.id.btnZoomIn).setOnClickListener {
-            evaluateJavascript("window.mapApi.zoomIn();")
-        }
-        findViewById<ImageButton>(R.id.btnZoomOut).setOnClickListener {
-            evaluateJavascript("window.mapApi.zoomOut();")
-        }
-        findViewById<ImageButton>(R.id.btnCompass).setOnClickListener { toggleHeadingUp() }
-        findViewById<ImageButton>(R.id.btnRecenter).setOnClickListener {
-            followUser = true
-            evaluateJavascript("window.mapApi.recenter();")
-        }
+        bindViews()
 
         tvInstruction?.setText(R.string.nav_status_locating)
 
-        navMapWebView = findViewById(R.id.navMap)
-        navMapWebView?.settings?.apply {
-            javaScriptEnabled = true
-            allowFileAccess = true
-            allowContentAccess = false
-            databaseEnabled = false
-            domStorageEnabled = false
-            saveFormData = false
-            builtInZoomControls = false
-            displayZoomControls = false
-            userAgentString = USER_AGENT
-        }
-        navMapWebView?.addJavascriptInterface(NavBridge(), "NavBridge")
-        navMapWebView?.setWebViewClient(object : WebViewClient() {
-            override fun onPageFinished(view: WebView, url: String) {
-                pageReady = true
-                maybeRenderRoute()
-            }
-
-            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                val url = request.url?.toString()
-                if (url != null && !url.startsWith("https://") && !url.startsWith("file://")) {
-                    return true
-                }
-                return false
-            }
-        })
+        initMapView()
         navMapWebView?.loadUrl("file:///android_asset/nav_map.html")
 
         initTts()
@@ -168,6 +127,89 @@ class NavigationActivity : Activity() {
         }
 
         ensureLocationPermission()
+    }
+
+    private fun bindViews() {
+        tvInstruction = findViewById(R.id.tvInstruction)
+        tvManeuverDistance = findViewById(R.id.tvManeuverDistance)
+        tvSub = findViewById(R.id.tvSub)
+        arrivalPanel = findViewById(R.id.arrivalPanel)
+        tvArrivalAddress = findViewById(R.id.tvArrivalAddress)
+        findViewById<Button>(R.id.btnDone).setOnClickListener { finish() }
+        findViewById<Button>(R.id.btnStop).setOnClickListener { finish() }
+        findViewById<ImageButton>(R.id.btnZoomIn).setOnClickListener {
+            evaluateJavascript("window.mapApi.zoomIn();")
+        }
+        findViewById<ImageButton>(R.id.btnZoomOut).setOnClickListener {
+            evaluateJavascript("window.mapApi.zoomOut();")
+        }
+        findViewById<ImageButton>(R.id.btnCompass).setOnClickListener { toggleHeadingUp() }
+        findViewById<ImageButton>(R.id.btnRecenter).setOnClickListener {
+            followUser = true
+            evaluateJavascript("window.mapApi.recenter();")
+        }
+        findViewById<ImageButton>(R.id.btnCompass).alpha = if (headingUp) 1f else 0.4f
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun initMapView() {
+        if (navMapWebView == null) {
+            navMapWebView = WebView(this).apply {
+                settings.apply {
+                    javaScriptEnabled = true
+                    allowFileAccess = true
+                    allowContentAccess = false
+                    databaseEnabled = false
+                    domStorageEnabled = false
+                    saveFormData = false
+                    builtInZoomControls = false
+                    displayZoomControls = false
+                    userAgentString = USER_AGENT
+                }
+                addJavascriptInterface(NavBridge(), "NavBridge")
+                setWebViewClient(object : WebViewClient() {
+                    override fun onPageFinished(view: WebView, url: String) {
+                        pageReady = true
+                        maybeRenderRoute()
+                    }
+
+                    override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                        val url = request.url?.toString()
+                        if (url != null && !url.startsWith("https://") && !url.startsWith("file://")) {
+                            return true
+                        }
+                        return false
+                    }
+                })
+            }
+        }
+        val container = findViewById<android.widget.FrameLayout>(R.id.navMap)
+        navMapWebView?.let { web ->
+            if (web.parent != null) {
+                (web.parent as? ViewGroup)?.removeView(web)
+            }
+            container.addView(
+                web,
+                android.widget.FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            )
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (navMapWebView == null) return
+        setContentView(R.layout.activity_navigation)
+        bindViews()
+        initMapView()
+        arrivalPanel?.visibility =
+            if (arrived) android.view.View.VISIBLE else android.view.View.GONE
+        val loc = lastLocation
+        if (routeReady && loc != null) {
+            updateNavigation(loc)
+        }
     }
 
     private fun toggleHeadingUp() {
@@ -297,6 +339,7 @@ class NavigationActivity : Activity() {
     }
 
     private fun onNewLocation(location: Location) {
+        lastLocation = location
         lastPosition = location.latitude to location.longitude
         lastBearing = if (location.hasBearing()) location.bearing else lastBearing
         if (navMapWebView != null) {
@@ -581,7 +624,7 @@ class NavigationActivity : Activity() {
     private fun formatDistance(meters: Double): String {
         return when {
             meters >= 1000 -> String.format(Locale.US, "%.1f km", meters / 1000.0)
-            meters >= 100 -> String.format(Locale.US, "%.0f m", (meters / 10.0).roundToInt() * 10)
+            meters >= 100 -> String.format(Locale.US, "%d m", (meters / 10.0).roundToInt() * 10)
             else -> String.format(Locale.US, "%.0f m", meters)
         }
     }

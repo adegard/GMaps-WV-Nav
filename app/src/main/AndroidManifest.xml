@@ -117,7 +117,8 @@
         <activity
             android:name=".NavigationActivity"
             android:exported="false"
-            android:launchMode="singleTask" />
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode|density" />
         <meta-data android:name="android.webkit.WebView.MetricsOptOut"
             android:value="true" />
     </application>
