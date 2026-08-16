@@ -80,6 +80,7 @@ class NavigationActivity : Activity() {
     private var routeTotalDuration = 0.0
     private var routeLoading = false
     private var routeReady = false
+    private var routeGeneration = 0
     private var pageReady = false
     private var currentStepIndex = 0
     private var lastAnnouncedStep = -1
@@ -315,11 +316,12 @@ class NavigationActivity : Activity() {
         val start = lastPosition ?: return
         val dest = destination ?: return
         routeLoading = true
+        val gen = ++routeGeneration
         tvInstruction?.setText(R.string.nav_status_loading_route)
-        fetchRoute(start, dest)
+        fetchRoute(start, dest, gen)
     }
 
-    private fun fetchRoute(start: Pair<Double, Double>, dest: Pair<Double, Double>) {
+    private fun fetchRoute(start: Pair<Double, Double>, dest: Pair<Double, Double>, gen: Int) {
         Thread {
             try {
                 val url = URL(
@@ -331,6 +333,10 @@ class NavigationActivity : Activity() {
                 val json = httpGet(url)
                 val parsed = parseRoute(json)
                 handler.post {
+                    if (gen != routeGeneration) {
+                        routeLoading = false
+                        return@post
+                    }
                     if (parsed == null) {
                         routeLoading = false
                         tvInstruction?.setText(R.string.nav_error_route)
@@ -354,6 +360,10 @@ class NavigationActivity : Activity() {
             } catch (e: Exception) {
                 Log.w(TAG, "Route fetch failed", e)
                 handler.post {
+                    if (gen != routeGeneration) {
+                        routeLoading = false
+                        return@post
+                    }
                     routeLoading = false
                     tvInstruction?.setText(R.string.nav_error_route)
                     Toast.makeText(this, R.string.nav_error_route, Toast.LENGTH_LONG).show()
@@ -703,6 +713,25 @@ class NavigationActivity : Activity() {
         @JavascriptInterface
         fun setManualMode() {
             followUser = false
+        }
+
+        @JavascriptInterface
+        fun onDestinationPicked(lat: Double, lng: Double) {
+            handler.post {
+                destination = lat to lng
+                destinationLabel = String.format(Locale.US, "%.5f, %.5f", lat, lng)
+                tvArrivalAddress?.text = destinationLabel
+                arrived = false
+                arrivalPanel?.visibility = android.view.View.GONE
+                routeReady = false
+                routeLoading = false
+                currentStepIndex = 0
+                lastAnnouncedStep = -1
+                followUser = true
+                evaluateJavascript("window.mapApi.clearRoute();")
+                tvInstruction?.setText(R.string.nav_status_loading_route)
+                maybeFetchRoute()
+            }
         }
     }
 

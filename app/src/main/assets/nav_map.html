@@ -32,7 +32,7 @@ var routeLine = null;
 var destMarker = null;
 var youMarker = null;
 var currentPos = null;
-var manualMode = false;
+var followMode = true;
 var headingUp = true;
 var lastBearing = 0;
 
@@ -64,8 +64,26 @@ function navBridge() {
     return null;
 }
 
-map.on('dragstart', function () { manualMode = true; var b = navBridge(); if (b) { try { b.setManualMode(); } catch (e) {} } });
-map.on('zoomstart', function () { manualMode = true; var b = navBridge(); if (b) { try { b.setManualMode(); } catch (e) {} } });
+map.on('dragstart', function () {
+    followMode = false;
+    var b = navBridge();
+    if (b) { try { b.setManualMode(); } catch (e) {} }
+});
+
+map.on('click', function (e) {
+    setPickedDestination(e.latlng.lat, e.latlng.lng);
+});
+
+function setPickedDestination(lat, lng) {
+    if (!destMarker) {
+        destMarker = L.marker([lat, lng], { icon: destIcon, bubblingMouseEvents: false }).addTo(map);
+    } else {
+        destMarker.setLatLng([lat, lng]);
+    }
+    followMode = true;
+    var b = navBridge();
+    if (b) { try { b.onDestinationPicked(lat, lng); } catch (e) {} }
+}
 
 function wrapAngle(a) {
     a = a % 360;
@@ -103,25 +121,38 @@ function applyHeading() {
         setRotation(0);
     }
 }
+function centerOnMe() {
+    if (!currentPos) return;
+    map.setView(currentPos, map.getZoom(), { animate: false });
+    applyHeading();
+}
 
 window.mapApi = {
     showRoute: function (coords) {
         if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
         var latlngs = coords.map(function (p) { return [p[1], p[0]]; });
         if (latlngs.length > 1) {
-            routeLine = L.polyline(latlngs, { color: '#1565c0', weight: 6, opacity: 0.85, lineJoin: 'round' }).addTo(map);
+            routeLine = L.polyline(latlngs, {
+                color: '#1565c0', weight: 6, opacity: 0.85, lineJoin: 'round',
+                bubblingMouseEvents: false
+            }).addTo(map);
             map.fitBounds(routeLine.getBounds(), { padding: [50, 50], maxZoom: 16 });
         }
-        applyHeading();
+        if (followMode) { centerOnMe(); } else { applyHeading(); }
     },
     setDestination: function (lat, lng) {
-        if (destMarker) { map.removeLayer(destMarker); destMarker = null; }
-        destMarker = L.marker([lat, lng], { icon: destIcon }).addTo(map);
+        if (!destMarker) {
+            destMarker = L.marker([lat, lng], { icon: destIcon, bubblingMouseEvents: false }).addTo(map);
+        } else {
+            destMarker.setLatLng([lat, lng]);
+        }
     },
     updatePosition: function (lat, lng, bearing) {
         currentPos = [lat, lng];
         lastBearing = bearing;
-        if (!youMarker) { youMarker = L.marker(currentPos, { icon: posIcon, zIndexOffset: 1000 }).addTo(map); }
+        if (!youMarker) {
+            youMarker = L.marker(currentPos, { icon: posIcon, zIndexOffset: 1000, keyboard: false }).addTo(map);
+        }
         youMarker.setLatLng(currentPos);
         var el = youMarker.getElement();
         if (el) {
@@ -129,7 +160,7 @@ window.mapApi = {
             if (svg) { svg.setAttribute('style', 'transform: rotate(' + bearing + 'deg)'); }
         }
         if (headingUp) { setRotation(-bearing); }
-        if (!manualMode && map.getZoom() < 15) { map.setView(currentPos, 16); }
+        if (followMode) { centerOnMe(); }
     },
     setHeadingMode: function (on) {
         headingUp = !!on;
@@ -142,9 +173,14 @@ window.mapApi = {
         map.zoomOut();
     },
     recenter: function () {
-        manualMode = false;
-        if (currentPos) { map.setView(currentPos, Math.max(map.getZoom(), 16)); }
+        followMode = true;
+        if (currentPos) {
+            map.setView(currentPos, Math.max(map.getZoom(), 16), { animate: false });
+        }
         applyHeading();
+    },
+    clearRoute: function () {
+        if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
     },
     clear: function () {
         if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
