@@ -776,6 +776,82 @@ class NavigationActivity : Activity() {
                 maybeFetchRoute()
             }
         }
+
+        @JavascriptInterface
+        fun onPoiRequest(lat: Double, lng: Double) {
+            Thread {
+                val info = try {
+                    fetchPoiInfo(lat, lng)
+                } catch (e: Exception) {
+                    Log.w(TAG, "POI fetch failed", e)
+                    JSONObject()
+                        .put("error", true)
+                        .put(
+                            "name",
+                            String.format(Locale.US, "%.5f, %.5f", lat, lng)
+                        )
+                        .toString()
+                }
+                handler.post { evaluateJavascript("window.mapApi.showPoi($info);") }
+            }.start()
+        }
+    }
+
+    private fun fetchPoiInfo(lat: Double, lng: Double): String {
+        val obj = JSONObject()
+        val lang = URLEncoder.encode(Locale.getDefault().language, "UTF-8")
+        try {
+            val url = URL(
+                "https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=$lat&lon=$lng" +
+                    "&zoom=18&addressdetails=1&accept-language=$lang"
+            )
+            val reverse = JSONObject(httpGet(url))
+            obj.put("name", reverse.optString("name"))
+            obj.put("address", reverse.optString("display_name"))
+            val category = reverse.optString("category", "")
+            val type = reverse.optString("type", "")
+            val label = type.ifBlank { category }
+            if (label.isNotBlank()) {
+                obj.put("category", label.replaceFirstChar { it.titlecase(Locale.getDefault()) })
+            }
+            val extra = reverse.optJSONObject("extratags")
+            if (extra != null) {
+                val website = extra.optString("website", "")
+                    .ifBlank { extra.optString("contact:website", "") }
+                if (website.isNotBlank()) obj.put("website", website)
+                val phone = extra.optString("phone", "")
+                    .ifBlank { extra.optString("contact:phone", "") }
+                if (phone.isNotBlank()) obj.put("phone", phone)
+                val hours = extra.optString("opening_hours", "")
+                if (hours.isNotBlank()) obj.put("hours", hours)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Reverse geocode failed", e)
+        }
+        val photos = JSONArray()
+        try {
+            val url = URL(
+                "https://commons.wikimedia.org/w/api.php?action=query&format=json" +
+                    "&generator=geosearch&ggscoord=$lat%7C$lng&ggsradius=200&ggslimit=12" +
+                    "&prop=imageinfo&iiprop=url&iiurlwidth=1000"
+            )
+            val commons = JSONObject(httpGet(url))
+            val pages = commons.optJSONObject("query")?.optJSONObject("pages") ?: JSONObject()
+            val it = pages.keys()
+            while (it.hasNext()) {
+                val page = pages.getJSONObject(it.next())
+                val ii = page.optJSONObject("imageinfo")?.optJSONObject("0") ?: continue
+                val thumb = ii.optString("thumburl", "")
+                val orig = ii.optString("url", "")
+                if (thumb.isNotEmpty()) {
+                    photos.put(JSONObject().put("thumb", thumb).put("orig", orig))
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Commons photo fetch failed", e)
+        }
+        obj.put("photos", photos)
+        return obj.toString()
     }
 
     private data class NavStep(
