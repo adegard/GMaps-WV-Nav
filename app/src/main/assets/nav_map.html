@@ -8,8 +8,17 @@
     html, body, #map { height: 100%; margin: 0; padding: 0; }
     #map { background: #aad3df; }
     .you-icon { background: transparent; border: none; pointer-events: none; }
-    .you-wrap { position: relative; transition: top 0.25s ease; }
-    .you-wrap.bottom { top: calc(100vh * 0.25); }
+    #carHud {
+        position: fixed;
+        left: 50%;
+        bottom: 25%;
+        transform: translate(-50%, 50%);
+        width: 42px;
+        height: 42px;
+        z-index: 1100;
+        pointer-events: none;
+        display: none;
+    }
     .dest-icon { background: transparent; border: none; }
     #tip {
         position: fixed;
@@ -30,6 +39,16 @@
 <body>
 <div id="map"></div>
 <div id="tip">Long-press anywhere to navigate there</div>
+<div id="carHud"><svg id="carSvg" width="42" height="42" viewBox="0 0 30 30">
+    <g transform="translate(15,15)">
+        <path d="M0 -10.5 C-3.2 -10.5 -5.2 -8.8 -5.8 -7 L-8.6 4.5 C-9.2 6.6 -8.2 7.8 -6.6 8 L-6.6 9 L6.6 9 L6.6 8 C8.2 7.8 9.2 6.6 8.6 4.5 L5.8 -7 C5.2 -8.8 3.2 -10.5 0 -10.5 Z" fill="#1565c0" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>
+        <path d="M-4.2 -8.3 C-4.2 -9.5 -3.1 -10.1 -1.8 -10.1 L1.8 -10.1 C3.1 -10.1 4.2 -9.5 4.2 -8.3 L3.3 -3.4 L-3.3 -3.4 Z" fill="#0d47a1"/>
+        <rect x="-6.8" y="-5.8" width="1.8" height="1.5" rx="0.75" fill="#ffe082"/>
+        <rect x="5" y="-5.8" width="1.8" height="1.5" rx="0.75" fill="#ffe082"/>
+        <rect x="-5.4" y="4.5" width="2" height="2.6" rx="0.6" fill="#ff5252"/>
+        <rect x="3.4" y="4.5" width="2" height="2.6" rx="0.6" fill="#ff5252"/>
+    </g>
+</svg></div>
 <script src="leaflet/leaflet.js"></script>
 <script src="leaflet/leaflet-rotate.js"></script>
 <script>
@@ -55,18 +74,12 @@ var lastBearing = 0;
 
 var posIcon = L.divIcon({
     className: 'you-icon',
-    html: '<div class="you-wrap" style="width:30px;height:30px">' +
-        '<svg class="you-svg" width="30" height="30" viewBox="0 0 30 30">' +
-        '<g transform="translate(15,15)">' +
-        '<path d="M0 -10.5 C-3.2 -10.5 -5.2 -8.8 -5.8 -7 L-8.6 4.5 C-9.2 6.6 -8.2 7.8 -6.6 8 L-6.6 9 L6.6 9 L6.6 8 C8.2 7.8 9.2 6.6 8.6 4.5 L5.8 -7 C5.2 -8.8 3.2 -10.5 0 -10.5 Z" fill="#1565c0" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>' +
-        '<path d="M-4.2 -8.3 C-4.2 -9.5 -3.1 -10.1 -1.8 -10.1 L1.8 -10.1 C3.1 -10.1 4.2 -9.5 4.2 -8.3 L3.3 -3.4 L-3.3 -3.4 Z" fill="#0d47a1"/>' +
-        '<rect x="-6.8" y="-5.8" width="1.8" height="1.5" rx="0.75" fill="#ffe082"/>' +
-        '<rect x="5" y="-5.8" width="1.8" height="1.5" rx="0.75" fill="#ffe082"/>' +
-        '<rect x="-5.4" y="4.5" width="2" height="2.6" rx="0.6" fill="#ff5252"/>' +
-        '<rect x="3.4" y="4.5" width="2" height="2.6" rx="0.6" fill="#ff5252"/>' +
-        '</g></svg></div>',
-    iconSize: [30, 30],
-    iconAnchor: [15, 15]
+    html: '<div style="width:16px;height:16px">' +
+        '<svg width="16" height="16" viewBox="0 0 16 16">' +
+        '<circle cx="8" cy="8" r="6.5" fill="#1565c0" stroke="#ffffff" stroke-width="2"/>' +
+        '</svg></div>',
+    iconSize: [16, 16],
+    iconAnchor: [8, 8]
 });
 
 var destIcon = L.divIcon({
@@ -86,17 +99,18 @@ function navBridge() {
     return null;
 }
 
-function applyFollowOffset() {
-    if (!youMarker) return;
-    var el = youMarker.getElement();
-    if (!el) return;
-    var w = el.querySelector('.you-wrap');
-    if (w) { w.classList.toggle('bottom', followMode); }
+function applyCar() {
+    var car = document.getElementById('carHud');
+    if (car) { car.style.display = followMode ? 'block' : 'none'; }
+    if (youMarker) {
+        var el = youMarker.getElement();
+        if (el) { el.style.display = followMode ? 'none' : 'block'; }
+    }
 }
 
 map.on('dragstart', function () {
     followMode = false;
-    applyFollowOffset();
+    applyCar();
     var b = navBridge();
     if (b) { try { b.setManualMode(); } catch (e) {} }
 });
@@ -186,12 +200,9 @@ window.mapApi = {
             youMarker = L.marker(currentPos, { icon: posIcon, zIndexOffset: 1000, keyboard: false }).addTo(map);
         }
         youMarker.setLatLng(currentPos);
-        applyFollowOffset();
-        var el = youMarker.getElement();
-        if (el) {
-            var svg = el.querySelector('.you-svg');
-            if (svg) { svg.setAttribute('style', 'transform: rotate(' + bearing + 'deg)'); }
-        }
+        applyCar();
+        var cs = document.getElementById('carSvg');
+        if (cs) { cs.setAttribute('style', 'transform: rotate(' + bearing + 'deg)'); }
         if (headingUp) { setRotation(-bearing); }
         if (followMode) { centerOnMe(); }
     },
@@ -207,7 +218,7 @@ window.mapApi = {
     },
     recenter: function () {
         followMode = true;
-        applyFollowOffset();
+        applyCar();
         if (currentPos) {
             map.setView(currentPos, Math.max(map.getZoom(), 16), { animate: false });
         }

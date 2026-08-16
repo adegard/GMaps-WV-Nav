@@ -41,6 +41,7 @@ import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.GeolocationPermissions
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
@@ -137,10 +138,7 @@ class MainActivity : Activity() {
         // Give location access
         mapsWebView!!.setWebChromeClient(object : WebChromeClient() {
             override fun onConsoleMessage(message: ConsoleMessage): Boolean {
-                Log.d(
-                    TAG,
-                    "${message.message()} -- From line ${message.lineNumber()} of ${message.sourceId()}"
-                )
+                mapLog("[console] ${message.message()}")
                 return true
             }
 
@@ -206,8 +204,17 @@ class MainActivity : Activity() {
 
         mapsWebView!!.setWebViewClient(object : WebViewClient() {
             override fun onPageFinished(view: WebView, url: String) {
+                mapLog("[page] finished: $url")
                 val patch = context.assets.open("patch-banner.js").reader(Charsets.UTF_8).use { it.readText() }
                 view.evaluateJavascript(patch) {}
+            }
+
+            override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+                mapLog("[error] ${request.url} :: ${error.errorCode} ${error.description}")
+            }
+
+            override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, errorResponse: WebResourceResponse) {
+                mapLog("[httpError] ${request.url} :: ${errorResponse.statusCode}")
             }
 
             // Keep these in sync!
@@ -396,14 +403,11 @@ class MainActivity : Activity() {
                 }
                 for (url in blockedURLs) {
                     if (request.url.toString().contains(url)) {
-                        Log.d(
-                            TAG,
-                            "[shouldOverrideUrlLoading][ON DENYLIST] Blocked access to " + request.url.toString()
-                        )
+                        mapLog("[denied] " + request.url)
                         return true // Deny URLs on DENYLIST
                     }
                 }
-                Log.d(TAG, "[nav] forward: " + request.url.toString())
+                mapLog("[forward] " + request.url)
                 return false
             }
         })
@@ -430,6 +434,19 @@ class MainActivity : Activity() {
 
         // Load Google Maps
         mapsWebView!!.loadUrl(urlToLoad)
+    }
+
+    private fun mapLog(msg: String) {
+        Log.d(TAG, "[maplog] $msg")
+        try {
+            val dir = getExternalFilesDir(null) ?: return
+            val f = java.io.File(dir, "maplog.txt")
+            f.appendText(
+                java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date()) +
+                    " " + msg + "\n"
+            )
+        } catch (_: Exception) {
+        }
     }
 
     override fun onDestroy() {
@@ -784,7 +801,12 @@ class MainActivity : Activity() {
             "khms3.google.com",
             "maps.app.goo.gl",
             "maps.google.com",
+            "maps.googleapis.com",
             "maps.gstatic.com",
+            "mt0.google.com",
+            "mt1.google.com",
+            "mt2.google.com",
+            "mt3.google.com",
             "ssl.gstatic.com",
             "streetviewpixels-pa.googleapis.com",
             "www.google.com",
