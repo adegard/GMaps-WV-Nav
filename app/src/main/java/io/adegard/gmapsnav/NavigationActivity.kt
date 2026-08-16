@@ -41,6 +41,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
+import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
 import org.json.JSONArray
@@ -68,6 +69,7 @@ class NavigationActivity : Activity() {
     private var arrivalPanel: android.view.View? = null
     private var tvArrivalAddress: TextView? = null
     private var followUser = true
+    private var headingUp = true
 
     private var destination: Pair<Double, Double>? = null
     private var destinationLabel: String = ""
@@ -104,7 +106,14 @@ class NavigationActivity : Activity() {
         tvArrivalAddress = findViewById(R.id.tvArrivalAddress)
         findViewById<Button>(R.id.btnDone).setOnClickListener { finish() }
         findViewById<Button>(R.id.btnStop).setOnClickListener { finish() }
-        findViewById<Button>(R.id.btnRecenter).setOnClickListener {
+        findViewById<ImageButton>(R.id.btnZoomIn).setOnClickListener {
+            evaluateJavascript("window.mapApi.zoomIn();")
+        }
+        findViewById<ImageButton>(R.id.btnZoomOut).setOnClickListener {
+            evaluateJavascript("window.mapApi.zoomOut();")
+        }
+        findViewById<ImageButton>(R.id.btnCompass).setOnClickListener { toggleHeadingUp() }
+        findViewById<ImageButton>(R.id.btnRecenter).setOnClickListener {
             followUser = true
             evaluateJavascript("window.mapApi.recenter();")
         }
@@ -158,6 +167,16 @@ class NavigationActivity : Activity() {
         }
 
         ensureLocationPermission()
+    }
+
+    private fun toggleHeadingUp() {
+        headingUp = !headingUp
+        evaluateJavascript("window.mapApi.setHeadingMode($headingUp);")
+        val compass = findViewById<ImageButton>(R.id.btnCompass)
+        compass.alpha = if (headingUp) 1f else 0.4f
+        compass.contentDescription = getString(
+            if (headingUp) R.string.nav_heading_up else R.string.nav_heading_up_off
+        )
     }
 
     private fun ensureLocationPermission() {

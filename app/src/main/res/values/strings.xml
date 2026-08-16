@@ -25,6 +25,10 @@
     <string name="nav_arrived">You have arrived</string>
     <string name="nav_done">Done</string>
     <string name="nav_recenter">Recenter map</string>
+    <string name="nav_zoom_in">Zoom in</string>
+    <string name="nav_zoom_out">Zoom out</string>
+    <string name="nav_heading_up">Rotate map to heading</string>
+    <string name="nav_heading_up_off">Rotate map to heading (off)</string>
     <string name="nav_stop">End navigation</string>
     <string name="nav_error_route">Could not calculate a route.</string>
     <string name="nav_error_geocode">Could not find the destination.</string>
