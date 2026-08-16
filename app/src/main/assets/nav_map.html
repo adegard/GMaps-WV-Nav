@@ -9,152 +9,25 @@
     #map { background: #aad3df; }
     .you-icon { background: transparent; border: none; }
     .dest-icon { background: transparent; border: none; }
-
-    #placeCard {
+    #tip {
         position: fixed;
-        left: 8px;
-        right: 8px;
-        bottom: 8px;
-        max-height: 46%;
-        display: flex;
-        flex-direction: column;
-        background: #F8F8FA;
-        color: #212121;
-        border-radius: 16px;
-        box-shadow: 0 6px 20px rgba(0,0,0,0.4);
-        z-index: 2000;
-        overflow: hidden;
-    }
-    #placeCard.hidden { display: none; }
-    .place-head {
-        display: flex;
-        align-items: flex-start;
-        padding: 12px 14px 6px 14px;
-    }
-    .place-info { flex: 1; min-width: 0; }
-    .place-name {
-        font-size: 17px;
-        font-weight: 600;
-        color: #212121;
-        max-height: 44px;
-        overflow: hidden;
-    }
-    .place-cat {
-        margin-top: 2px;
-        font-size: 12px;
-        font-weight: 600;
-        color: #1565c0;
-        text-transform: capitalize;
-    }
-    .place-addr {
-        margin-top: 4px;
-        font-size: 13px;
-        color: #555;
-        max-height: 34px;
-        overflow: hidden;
-    }
-    .place-meta {
-        margin-top: 4px;
-        font-size: 12px;
-        color: #777;
-        max-height: 32px;
-        overflow: hidden;
-        word-break: break-all;
-    }
-    .place-x {
-        border: none;
-        background: #E0E0E0;
-        color: #555;
-        width: 30px;
-        height: 30px;
-        border-radius: 50%;
-        font-size: 16px;
-        line-height: 1;
-        margin-left: 8px;
-        flex: none;
-    }
-    #placePhotos {
-        display: flex;
-        gap: 8px;
-        overflow-x: auto;
-        padding: 6px 14px 10px 14px;
-    }
-    #placePhotos img {
-        width: 120px;
-        height: 90px;
-        object-fit: cover;
-        border-radius: 10px;
-        background: #ddd;
-        flex: none;
-    }
-    #placeStatus {
-        padding: 2px 14px 10px 14px;
-        font-size: 13px;
-        color: #888;
-    }
-    .place-nav {
-        margin: 0 14px 12px 14px;
-        height: 46px;
-        border: none;
-        border-radius: 23px;
-        background: #1565c0;
+        left: 50%;
+        bottom: 18px;
+        transform: translateX(-50%);
+        background: rgba(33,33,33,0.85);
         color: #fff;
-        font-size: 16px;
-        font-weight: 600;
-    }
-
-    #lightbox {
-        position: fixed;
-        inset: 0;
-        background: rgba(0,0,0,0.9);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 3000;
-    }
-    #lightbox.hidden { display: none; }
-    #lightbox img {
-        max-width: 96vw;
-        max-height: 92vh;
-        border-radius: 8px;
-    }
-    #lightboxX {
-        position: absolute;
-        top: 12px;
-        right: 12px;
-        border: none;
-        background: rgba(255,255,255,0.2);
-        color: #fff;
-        width: 38px;
-        height: 38px;
-        border-radius: 50%;
-        font-size: 20px;
+        padding: 8px 14px;
+        border-radius: 20px;
+        font-size: 12px;
+        z-index: 1000;
+        pointer-events: none;
+        display: none;
     }
 </style>
 </head>
 <body>
 <div id="map"></div>
-
-<div id="placeCard" class="hidden">
-    <div class="place-head">
-        <div class="place-info">
-            <div id="placeName" class="place-name"></div>
-            <div id="placeCat" class="place-cat"></div>
-            <div id="placeAddr" class="place-addr"></div>
-            <div id="placeMeta" class="place-meta"></div>
-        </div>
-        <button id="placeX" class="place-x">✕</button>
-    </div>
-    <div id="placePhotos"></div>
-    <div id="placeStatus"></div>
-    <button id="placeNav" class="place-nav">Navigate here</button>
-</div>
-
-<div id="lightbox" class="hidden">
-    <img id="lightboxImg" alt="">
-    <button id="lightboxX">✕</button>
-</div>
-
+<div id="tip">Tap a place to open it in Google Maps · long-press to navigate there</div>
 <script src="leaflet/leaflet.js"></script>
 <script src="leaflet/leaflet-rotate.js"></script>
 <script>
@@ -177,7 +50,6 @@ var currentPos = null;
 var followMode = true;
 var headingUp = true;
 var lastBearing = 0;
-var placePending = null;
 
 var posIcon = L.divIcon({
     className: 'you-icon',
@@ -214,61 +86,25 @@ map.on('dragstart', function () {
 });
 
 map.on('click', function (e) {
-    selectPlace(e.latlng.lat, e.latlng.lng);
-});
-
-function selectPlace(lat, lng) {
-    placePending = [lat, lng];
-    if (!destMarker) {
-        destMarker = L.marker([lat, lng], { icon: destIcon, bubblingMouseEvents: false }).addTo(map);
-    } else {
-        destMarker.setLatLng([lat, lng]);
-    }
-    showPoiLoading();
     var b = navBridge();
-    if (b) { try { b.onPoiRequest(lat, lng); } catch (e) {} }
-}
+    if (b) { try { b.onOpenGooglePlace(e.latlng.lat, e.latlng.lng); } catch (e2) {} }
+});
 
-function startNavToPending() {
-    if (!placePending) return;
-    var p = placePending;
-    placePending = null;
-    hidePlaceCard();
-    followMode = true;
+map.on('contextmenu', function (e) {
     var b = navBridge();
-    if (b) { try { b.onDestinationPicked(p[0], p[1]); } catch (e) {} }
-}
-
-function showPoiLoading() {
-    document.getElementById('placeCard').classList.remove('hidden');
-    document.getElementById('placeName').textContent = 'Loading place info…';
-    document.getElementById('placeCat').textContent = '';
-    document.getElementById('placeAddr').textContent = '';
-    document.getElementById('placeMeta').textContent = '';
-    document.getElementById('placePhotos').innerHTML = '';
-    document.getElementById('placeStatus').textContent = '';
-}
-
-function hidePlaceCard() {
-    document.getElementById('placeCard').classList.add('hidden');
-    document.getElementById('lightbox').classList.add('hidden');
-}
-
-function openLightbox(src) {
-    document.getElementById('lightboxImg').src = src;
-    document.getElementById('lightbox').classList.remove('hidden');
-}
-
-document.getElementById('placeX').addEventListener('click', hidePlaceCard);
-document.getElementById('placeNav').addEventListener('click', startNavToPending);
-document.getElementById('lightboxX').addEventListener('click', function () {
-    document.getElementById('lightbox').classList.add('hidden');
+    if (b) { try { b.onDestinationPicked(e.latlng.lat, e.latlng.lng); } catch (e2) {} }
 });
-document.getElementById('lightbox').addEventListener('click', function (e) {
-    if (e.target.id === 'lightbox') {
-        this.classList.add('hidden');
-    }
-});
+
+var tipTimer = null;
+function showTip() {
+    var tip = document.getElementById('tip');
+    tip.style.display = 'block';
+    if (tipTimer) { clearTimeout(tipTimer); }
+    tipTimer = setTimeout(function () {
+        tip.style.display = 'none';
+    }, 3500);
+}
+setTimeout(showTip, 1500);
 
 function wrapAngle(a) {
     a = a % 360;
@@ -346,42 +182,6 @@ window.mapApi = {
         }
         if (headingUp) { setRotation(-bearing); }
         if (followMode) { centerOnMe(); }
-    },
-    showPoi: function (poi) {
-        document.getElementById('placeCard').classList.remove('hidden');
-        if (poi.error) {
-            document.getElementById('placeName').textContent = poi.name || 'Selected place';
-            document.getElementById('placeCat').textContent = '';
-            document.getElementById('placeAddr').textContent = poi.address || '';
-            document.getElementById('placeMeta').textContent = '';
-            document.getElementById('placeStatus').textContent = 'Could not load place details.';
-            return;
-        }
-        document.getElementById('placeName').textContent = poi.name || 'Selected place';
-        document.getElementById('placeCat').textContent = poi.category || '';
-        document.getElementById('placeAddr').textContent = poi.address || '';
-        var meta = [];
-        if (poi.phone) { meta.push(poi.phone); }
-        if (poi.hours) { meta.push(poi.hours); }
-        if (poi.website) { meta.push(poi.website); }
-        document.getElementById('placeMeta').textContent = meta.join('  ·  ');
-        var photosEl = document.getElementById('placePhotos');
-        photosEl.innerHTML = '';
-        var photos = poi.photos || [];
-        if (photos.length === 0) {
-            document.getElementById('placeStatus').textContent = 'No photos nearby.';
-        } else {
-            document.getElementById('placeStatus').textContent = photos.length + ' photo' + (photos.length > 1 ? 's' : '') + ' nearby';
-            for (var i = 0; i < photos.length; i++) {
-                (function (src) {
-                    var img = document.createElement('img');
-                    img.src = src;
-                    img.alt = '';
-                    img.addEventListener('click', function () { openLightbox(src); });
-                    photosEl.appendChild(img);
-                })(photos[i].thumb || photos[i].orig);
-            }
-        }
     },
     setHeadingMode: function (on) {
         headingUp = !!on;

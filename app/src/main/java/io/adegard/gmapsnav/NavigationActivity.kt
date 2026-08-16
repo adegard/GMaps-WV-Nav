@@ -26,6 +26,9 @@ import android.content.res.Configuration
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.media.AudioAttributes
+import android.media.MediaPlayer
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -70,8 +73,17 @@ class NavigationActivity : Activity() {
     private var tvSub: TextView? = null
     private var arrivalPanel: android.view.View? = null
     private var tvArrivalAddress: TextView? = null
+    private var hudPanel: android.view.View? = null
+    private var controlsPanel: android.view.View? = null
+    private var btnBackToMap: ImageButton? = null
+    private var btnVoice: ImageButton? = null
     private var followUser = true
     private var headingUp = true
+    private var voiceEnabled = true
+    private var approachActive = false
+    private val speechQueue = ArrayDeque<String>()
+    private var mediaPlayer: MediaPlayer? = null
+    private var speechBusy = false
 
     private var destination: Pair<Double, Double>? = null
     private var destinationLabel: String = ""
@@ -135,6 +147,10 @@ class NavigationActivity : Activity() {
         tvSub = findViewById(R.id.tvSub)
         arrivalPanel = findViewById(R.id.arrivalPanel)
         tvArrivalAddress = findViewById(R.id.tvArrivalAddress)
+        hudPanel = findViewById(R.id.hudPanel)
+        controlsPanel = findViewById(R.id.controlsPanel)
+        btnBackToMap = findViewById(R.id.btnBackToMap)
+        btnVoice = findViewById(R.id.btnVoice)
         findViewById<Button>(R.id.btnDone).setOnClickListener { finish() }
         findViewById<Button>(R.id.btnStop).setOnClickListener { finish() }
         findViewById<ImageButton>(R.id.btnZoomIn).setOnClickListener {
@@ -144,11 +160,17 @@ class NavigationActivity : Activity() {
             evaluateJavascript("window.mapApi.zoomOut();")
         }
         findViewById<ImageButton>(R.id.btnCompass).setOnClickListener { toggleHeadingUp() }
+        findViewById<ImageButton>(R.id.btnVoice).setOnClickListener { toggleVoice() }
         findViewById<ImageButton>(R.id.btnRecenter).setOnClickListener {
             followUser = true
             evaluateJavascript("window.mapApi.recenter();")
         }
+        btnBackToMap?.setOnClickListener {
+            navMapWebView?.loadUrl("file:///android_asset/nav_map.html")
+        }
         findViewById<ImageButton>(R.id.btnCompass).alpha = if (headingUp) 1f else 0.4f
+        updateVoiceButton()
+        updateChrome()
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -159,8 +181,8 @@ class NavigationActivity : Activity() {
                     javaScriptEnabled = true
                     allowFileAccess = true
                     allowContentAccess = false
-                    databaseEnabled = false
-                    domStorageEnabled = false
+                    databaseEnabled = true
+                    domStorageEnabled = true
                     saveFormData = false
                     builtInZoomControls = false
                     displayZoomControls = false
@@ -168,14 +190,29 @@ class NavigationActivity : Activity() {
                 }
                 addJavascriptInterface(NavBridge(), "NavBridge")
                 setWebViewClient(object : WebViewClient() {
+                    override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
+                        updateChrome()
+                    }
+
                     override fun onPageFinished(view: WebView, url: String) {
-                        pageReady = true
-                        maybeRenderRoute()
+                        updateChrome()
+                        if (url.startsWith("file://")) {
+                            pageReady = true
+                            maybeRenderRoute()
+                        }
                     }
 
                     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                        val url = request.url?.toString()
-                        if (url != null && !url.startsWith("https://") && !url.startsWith("file://")) {
+                        val url = request.url?.toString() ?: return false
+                        if (url.startsWith("google.navigation")) {
+                            val ssp = request.url.schemeSpecificPart ?: ""
+                            val dest = ssp.removePrefix("?").substringBefore("&").removePrefix("q=")
+                            if (dest.isNotEmpty()) {
+                                routeToRequested(Uri.decode(dest))
+                            }
+                            return true
+                        }
+                        if (!url.startsWith("https://") && !url.startsWith("file://")) {
                             return true
                         }
                         return false
@@ -196,6 +233,13 @@ class NavigationActivity : Activity() {
                 )
             )
         }
+    }
+
+    private fun updateChrome() {
+        val onMap = navMapWebView?.url?.startsWith("file://") != false
+        hudPanel?.visibility = if (onMap) android.view.View.VISIBLE else android.view.View.GONE
+        controlsPanel?.visibility = if (onMap) android.view.View.VISIBLE else android.view.View.GONE
+        btnBackToMap?.visibility = if (onMap) android.view.View.GONE else android.view.View.VISIBLE
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -220,6 +264,124 @@ class NavigationActivity : Activity() {
         compass.contentDescription = getString(
             if (headingUp) R.string.nav_heading_up else R.string.nav_heading_up_off
         )
+    }
+
+    private fun toggleVoice() {
+        voiceEnabled = !voiceEnabled
+        if (!voiceEnabled) {
+            speechQueue.clear()
+            try {
+                mediaPlayer?.stop()
+            } catch (e: Exception) {
+            }
+            mediaPlayer?.release()
+            mediaPlayer = null
+            speechBusy = false
+        }
+        updateVoiceButton()
+    }
+
+    private fun updateVoiceButton() {
+        btnVoice?.alpha = if (voiceEnabled) 1f else 0.4f
+        btnVoice?.setImageResource(
+            if (voiceEnabled) R.drawable.ic_volume_on else R.drawable.ic_volume_off
+        )
+        btnVoice?.contentDescription = getString(
+            if (voiceEnabled) R.string.nav_voice_on else R.string.nav_voice_off
+        )
+    }
+
+    private fun speak(text: String) {
+        if (!voiceEnabled) return
+        speechQueue.add(text)
+        playNextSpeech()
+    }
+
+    private fun playNextSpeech() {
+        if (speechBusy || speechQueue.isEmpty()) return
+        speechBusy = true
+        val text = speechQueue.removeFirst()
+        try {
+            val mp = MediaPlayer()
+            try {
+                mp.setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build()
+                )
+            } catch (e: Exception) {
+            }
+            val lang = Locale.getDefault().language.ifBlank { "en" }
+            val url = ONLINE_TTS_BASE +
+                URLEncoder.encode(text, "UTF-8") + "&tl=" + URLEncoder.encode(lang, "UTF-8")
+            mp.setDataSource(url)
+            mp.setOnPreparedListener { it.start() }
+            mp.setOnCompletionListener {
+                speechBusy = false
+                mediaPlayer = null
+                try { mp.release() } catch (e: Exception) {}
+                playNextSpeech()
+            }
+            mp.setOnErrorListener { _, _, _ ->
+                speechBusy = false
+                mediaPlayer = null
+                try { mp.release() } catch (e: Exception) {}
+                fallbackTts(text)
+                playNextSpeech()
+                true
+            }
+            mediaPlayer = mp
+            mp.prepareAsync()
+        } catch (e: Exception) {
+            Log.w(TAG, "Online TTS failed", e)
+            speechBusy = false
+            fallbackTts(text)
+            playNextSpeech()
+        }
+    }
+
+    private fun fallbackTts(text: String) {
+        if (!voiceEnabled) return
+        if (!ttsReady) return
+        try {
+            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "nav")
+        } catch (e: Exception) {
+            Log.w(TAG, "TTS speak failed", e)
+        }
+    }
+
+    private fun routeToRequested(dest: String) {
+        handler.post {
+            arrived = false
+            arrivalPanel?.visibility = android.view.View.GONE
+            routeReady = false
+            routeLoading = false
+            currentStepIndex = 0
+            lastAnnouncedStep = -1
+            approachActive = false
+            val trimmed = dest.trim()
+            val match = COORD_REGEX.find(trimmed)
+            if (match != null) {
+                destination = match.groupValues[1].toDouble() to match.groupValues[2].toDouble()
+                destinationLabel = trimmed
+            } else {
+                destination = null
+                destinationLabel = trimmed
+            }
+            tvArrivalAddress?.text = destinationLabel
+            tvInstruction?.setText(R.string.nav_status_loading_route)
+            navMapWebView?.loadUrl("file:///android_asset/nav_map.html")
+            if (destination == null) {
+                if (trimmed.isNotEmpty()) {
+                    geocode(trimmed)
+                } else {
+                    Toast.makeText(this, R.string.error_no_destination, Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                maybeFetchRoute()
+            }
+        }
     }
 
     private fun ensureLocationPermission() {
@@ -267,6 +429,14 @@ class NavigationActivity : Activity() {
             locationManager?.removeUpdates(listener)
         }
         locationListener = null
+        speechQueue.clear()
+        try {
+            mediaPlayer?.stop()
+        } catch (e: Exception) {
+        }
+        mediaPlayer?.release()
+        mediaPlayer = null
+        speechBusy = false
     }
 
     override fun onDestroy() {
@@ -275,6 +445,13 @@ class NavigationActivity : Activity() {
             locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
             locationManager?.removeUpdates(listener)
         }
+        speechQueue.clear()
+        try {
+            mediaPlayer?.stop()
+        } catch (e: Exception) {
+        }
+        mediaPlayer?.release()
+        mediaPlayer = null
         try {
             tts?.stop()
             tts?.shutdown()
@@ -396,6 +573,7 @@ class NavigationActivity : Activity() {
                     routeLoading = false
                     currentStepIndex = 0
                     lastAnnouncedStep = -1
+                    approachActive = false
                     tvArrivalAddress?.text = destinationLabel
                     maybeRenderRoute()
                     showStep(0, distanceToNextManeuver(0, 0.0))
@@ -559,6 +737,17 @@ class NavigationActivity : Activity() {
         val nextManeuver = distanceToNextManeuver(currentStepIndex, progress)
         showStep(currentStepIndex, nextManeuver)
 
+        if (nextManeuver > 300) {
+            approachActive = false
+        } else if (currentStepIndex < steps.size - 1 && nextManeuver <= 150 && !approachActive) {
+            approachActive = true
+            val upcoming = steps[currentStepIndex + 1]
+            if (!upcoming.isArrive) {
+                vibrate()
+                speak(getString(R.string.nav_approach, formatDistance(nextManeuver), buildInstruction(upcoming)))
+            }
+        }
+
         val fraction = if (routeTotalDistance > 0) remaining / routeTotalDistance else 1.0
         val remDuration = routeTotalDuration * fraction
         val etaText = formatEta(remDuration)
@@ -708,15 +897,6 @@ class NavigationActivity : Activity() {
         }
     }
 
-    private fun speak(text: String) {
-        if (!ttsReady) return
-        try {
-            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "nav")
-        } catch (e: Exception) {
-            Log.w(TAG, "TTS speak failed", e)
-        }
-    }
-
     private fun vibrate() {
         try {
             val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
@@ -770,6 +950,7 @@ class NavigationActivity : Activity() {
                 routeLoading = false
                 currentStepIndex = 0
                 lastAnnouncedStep = -1
+                approachActive = false
                 followUser = true
                 evaluateJavascript("window.mapApi.clearRoute();")
                 tvInstruction?.setText(R.string.nav_status_loading_route)
@@ -778,80 +959,13 @@ class NavigationActivity : Activity() {
         }
 
         @JavascriptInterface
-        fun onPoiRequest(lat: Double, lng: Double) {
-            Thread {
-                val info = try {
-                    fetchPoiInfo(lat, lng)
-                } catch (e: Exception) {
-                    Log.w(TAG, "POI fetch failed", e)
-                    JSONObject()
-                        .put("error", true)
-                        .put(
-                            "name",
-                            String.format(Locale.US, "%.5f, %.5f", lat, lng)
-                        )
-                        .toString()
-                }
-                handler.post { evaluateJavascript("window.mapApi.showPoi($info);") }
-            }.start()
-        }
-    }
-
-    private fun fetchPoiInfo(lat: Double, lng: Double): String {
-        val obj = JSONObject()
-        val lang = URLEncoder.encode(Locale.getDefault().language, "UTF-8")
-        try {
-            val url = URL(
-                "https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=$lat&lon=$lng" +
-                    "&zoom=18&addressdetails=1&accept-language=$lang"
-            )
-            val reverse = JSONObject(httpGet(url))
-            obj.put("name", reverse.optString("name"))
-            obj.put("address", reverse.optString("display_name"))
-            val category = reverse.optString("category", "")
-            val type = reverse.optString("type", "")
-            val label = type.ifBlank { category }
-            if (label.isNotBlank()) {
-                obj.put("category", label.replaceFirstChar { it.titlecase(Locale.getDefault()) })
+        fun onOpenGooglePlace(lat: Double, lng: Double) {
+            handler.post {
+                navMapWebView?.loadUrl(
+                    "https://www.google.com/maps/search/?api=1&query=$lat,$lng"
+                )
             }
-            val extra = reverse.optJSONObject("extratags")
-            if (extra != null) {
-                val website = extra.optString("website", "")
-                    .ifBlank { extra.optString("contact:website", "") }
-                if (website.isNotBlank()) obj.put("website", website)
-                val phone = extra.optString("phone", "")
-                    .ifBlank { extra.optString("contact:phone", "") }
-                if (phone.isNotBlank()) obj.put("phone", phone)
-                val hours = extra.optString("opening_hours", "")
-                if (hours.isNotBlank()) obj.put("hours", hours)
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Reverse geocode failed", e)
         }
-        val photos = JSONArray()
-        try {
-            val url = URL(
-                "https://commons.wikimedia.org/w/api.php?action=query&format=json" +
-                    "&generator=geosearch&ggscoord=$lat%7C$lng&ggsradius=200&ggslimit=12" +
-                    "&prop=imageinfo&iiprop=url&iiurlwidth=1000"
-            )
-            val commons = JSONObject(httpGet(url))
-            val pages = commons.optJSONObject("query")?.optJSONObject("pages") ?: JSONObject()
-            val it = pages.keys()
-            while (it.hasNext()) {
-                val page = pages.getJSONObject(it.next())
-                val ii = page.optJSONObject("imageinfo")?.optJSONObject("0") ?: continue
-                val thumb = ii.optString("thumburl", "")
-                val orig = ii.optString("url", "")
-                if (thumb.isNotEmpty()) {
-                    photos.put(JSONObject().put("thumb", thumb).put("orig", orig))
-                }
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Commons photo fetch failed", e)
-        }
-        obj.put("photos", photos)
-        return obj.toString()
     }
 
     private data class NavStep(
@@ -886,6 +1000,8 @@ class NavigationActivity : Activity() {
         private const val TAG = "GMapsNav"
         private const val OSRM_BASE = "https://router.project-osrm.org"
         private const val NOMINATIM = "https://nominatim.openstreetmap.org/search"
+        private const val ONLINE_TTS_BASE =
+            "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&q="
         private const val USER_AGENT =
             "GMaps-WV-Nav/2.0 (Android; +https://github.com/adegard/GMaps-WV-Nav)"
         private const val REQUEST_LOCATION = 100

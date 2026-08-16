@@ -9,6 +9,7 @@
         android:layout_height="match_parent" />
 
     <LinearLayout
+        android:id="@+id/hudPanel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="start|center_vertical"
@@ -47,7 +48,20 @@
             android:textSize="13sp" />
     </LinearLayout>
 
+    <ImageButton
+        android:id="@+id/btnBackToMap"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="8dp"
+        android:background="@drawable/fab_circle"
+        android:contentDescription="@string/nav_back_to_map"
+        android:src="@drawable/ic_back"
+        android:visibility="gone" />
+
     <LinearLayout
+        android:id="@+id/controlsPanel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="end|center_vertical"
@@ -79,6 +93,15 @@
             android:background="@drawable/fab_circle_dark"
             android:contentDescription="@string/nav_heading_up"
             android:src="@drawable/ic_compass" />
+
+        <ImageButton
+            android:id="@+id/btnVoice"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/fab_circle_dark"
+            android:contentDescription="@string/nav_voice_on"
+            android:src="@drawable/ic_volume_on" />
 
         <ImageButton
             android:id="@+id/btnRecenter"

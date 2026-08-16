@@ -29,6 +29,10 @@
     <string name="nav_zoom_out">Zoom out</string>
     <string name="nav_heading_up">Rotate map to heading</string>
     <string name="nav_heading_up_off">Rotate map to heading (off)</string>
+    <string name="nav_voice_on">Voice guidance on</string>
+    <string name="nav_voice_off">Voice guidance off</string>
+    <string name="nav_back_to_map">Back to navigation map</string>
+    <string name="nav_approach">In %1$s, %2$s</string>
     <string name="nav_stop">End navigation</string>
     <string name="nav_error_route">Could not calculate a route.</string>
     <string name="nav_error_geocode">Could not find the destination.</string>
