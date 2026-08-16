@@ -962,16 +962,6 @@ class NavigationActivity : Activity() {
                 maybeFetchRoute()
             }
         }
-
-        @JavascriptInterface
-        fun onOpenGooglePlace(lat: Double, lng: Double) {
-            Log.d(TAG, "[navweb] onOpenGooglePlace lat=$lat lng=$lng")
-            handler.post {
-                navMapWebView?.loadUrl(
-                    "https://www.google.com/maps/search/?api=1&query=$lat,$lng"
-                )
-            }
-        }
     }
 
     private data class NavStep(

@@ -387,9 +387,9 @@ class MainActivity : Activity() {
             allowContentAccess = false
             allowFileAccess = false
             builtInZoomControls = false
-            databaseEnabled = false
+            databaseEnabled = true
             displayZoomControls = false
-            domStorageEnabled = false
+            domStorageEnabled = true
             saveFormData = false
             // Change the User-Agent
             userAgentString = USER_AGENT
