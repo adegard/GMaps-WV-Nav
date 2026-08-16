@@ -39,6 +39,11 @@ To build locally:
 
     ./gradlew assembleRelease
 
+Screenshots
+-----------
+![In-app navigation](screenshots/navigation.png)
+![Voice guidance](screenshots/navigation-voice.png)
+
 Downsides
 ---------
 - The in-app navigation uses the public OSRM demo server
