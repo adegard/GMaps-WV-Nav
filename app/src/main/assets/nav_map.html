@@ -7,7 +7,9 @@
 <style>
     html, body, #map { height: 100%; margin: 0; padding: 0; }
     #map { background: #aad3df; }
-    .you-icon { background: transparent; border: none; }
+    .you-icon { background: transparent; border: none; pointer-events: none; }
+    .you-wrap { position: relative; transition: top 0.25s ease; }
+    .you-wrap.bottom { top: calc(100vh * 0.22); }
     .dest-icon { background: transparent; border: none; }
     #tip {
         position: fixed;
@@ -53,11 +55,12 @@ var lastBearing = 0;
 
 var posIcon = L.divIcon({
     className: 'you-icon',
-    html: '<svg class="you-svg" width="30" height="30" viewBox="0 0 30 30">' +
+    html: '<div class="you-wrap" style="width:30px;height:30px">' +
+        '<svg class="you-svg" width="30" height="30" viewBox="0 0 30 30">' +
         '<g transform="translate(15,15)">' +
         '<path d="M0 -12 L7 8 L0 4 L-7 8 Z" fill="#1565c0" stroke="#ffffff" stroke-width="2"/>' +
         '<circle cx="0" cy="0" r="3" fill="#ffffff"/>' +
-        '</g></svg>',
+        '</g></svg></div>',
     iconSize: [30, 30],
     iconAnchor: [15, 15]
 });
@@ -79,16 +82,54 @@ function navBridge() {
     return null;
 }
 
+function applyFollowOffset() {
+    if (!youMarker) return;
+    var el = youMarker.getElement();
+    if (!el) return;
+    var w = el.querySelector('.you-wrap');
+    if (w) { w.classList.toggle('bottom', followMode); }
+}
+
 map.on('dragstart', function () {
     followMode = false;
+    applyFollowOffset();
     var b = navBridge();
     if (b) { try { b.setManualMode(); } catch (e) {} }
 });
 
-map.on('click', function (e) {
+var lastTapFire = 0;
+function fireOpenGoogle(lat, lng) {
+    var now = Date.now();
+    if (now - lastTapFire < 600) { return; }
+    lastTapFire = now;
     var b = navBridge();
-    if (b) { try { b.onOpenGooglePlace(e.latlng.lat, e.latlng.lng); } catch (e2) {} }
+    if (b) { try { b.onOpenGooglePlace(lat, lng); } catch (e2) {} }
+}
+
+map.on('click', function (e) {
+    fireOpenGoogle(e.latlng.lat, e.latlng.lng);
 });
+
+var touchStartPt = null;
+var touchStartT = 0;
+var mapEl = map.getContainer();
+mapEl.addEventListener('touchstart', function (e) {
+    var t = e.touches && e.touches[0];
+    if (!t) return;
+    touchStartPt = { x: t.clientX, y: t.clientY };
+    touchStartT = Date.now();
+}, { passive: true });
+mapEl.addEventListener('touchend', function (e) {
+    if (!touchStartPt) return;
+    var t = e.changedTouches && e.changedTouches[0];
+    var dur = Date.now() - touchStartT;
+    var d = t ? Math.hypot(t.clientX - touchStartPt.x, t.clientY - touchStartPt.y) : 99;
+    touchStartPt = null;
+    if (dur >= 350 || d >= 10 || !t) return;
+    var r = mapEl.getBoundingClientRect();
+    var cp = map.containerPointToLatLng([t.clientX - r.left, t.clientY - r.top]);
+    fireOpenGoogle(cp.lat, cp.lng);
+}, { passive: true });
 
 map.on('contextmenu', function (e) {
     var b = navBridge();
@@ -175,6 +216,7 @@ window.mapApi = {
             youMarker = L.marker(currentPos, { icon: posIcon, zIndexOffset: 1000, keyboard: false }).addTo(map);
         }
         youMarker.setLatLng(currentPos);
+        applyFollowOffset();
         var el = youMarker.getElement();
         if (el) {
             var svg = el.querySelector('.you-svg');
@@ -195,6 +237,7 @@ window.mapApi = {
     },
     recenter: function () {
         followMode = true;
+        applyFollowOffset();
         if (currentPos) {
             map.setView(currentPos, Math.max(map.getZoom(), 16), { animate: false });
         }

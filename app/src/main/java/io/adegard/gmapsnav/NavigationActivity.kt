@@ -195,6 +195,7 @@ class NavigationActivity : Activity() {
                     }
 
                     override fun onPageFinished(view: WebView, url: String) {
+                        Log.d(TAG, "[navweb] page finished: $url")
                         updateChrome()
                         if (url.startsWith("file://")) {
                             pageReady = true
@@ -204,6 +205,7 @@ class NavigationActivity : Activity() {
 
                     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                         val url = request.url?.toString() ?: return false
+                        Log.d(TAG, "[navweb] override url: $url")
                         if (url.startsWith("google.navigation")) {
                             val ssp = request.url.schemeSpecificPart ?: ""
                             val dest = ssp.removePrefix("?").substringBefore("&").removePrefix("q=")
@@ -724,6 +726,7 @@ class NavigationActivity : Activity() {
         }
         if (idx != currentStepIndex) {
             currentStepIndex = idx
+            approachActive = false
             announce(steps[idx])
         }
 
@@ -737,9 +740,11 @@ class NavigationActivity : Activity() {
         val nextManeuver = distanceToNextManeuver(currentStepIndex, progress)
         showStep(currentStepIndex, nextManeuver)
 
-        if (nextManeuver > 300) {
+        val speedKmh = if (location.hasSpeed()) (location.speed * 3.6).roundToInt() else -1
+        val approachDistance = if (speedKmh >= 80) 1000.0 else 150.0
+        if (nextManeuver > 1100) {
             approachActive = false
-        } else if (currentStepIndex < steps.size - 1 && nextManeuver <= 150 && !approachActive) {
+        } else if (currentStepIndex < steps.size - 1 && nextManeuver <= approachDistance && !approachActive) {
             approachActive = true
             val upcoming = steps[currentStepIndex + 1]
             if (!upcoming.isArrive) {
@@ -751,7 +756,7 @@ class NavigationActivity : Activity() {
         val fraction = if (routeTotalDistance > 0) remaining / routeTotalDistance else 1.0
         val remDuration = routeTotalDuration * fraction
         val etaText = formatEta(remDuration)
-        val speed = if (location.hasSpeed()) (location.speed * 3.6).roundToInt() else -1
+        val speed = speedKmh
         val sub = buildString {
             append(getString(R.string.nav_distance_remaining, formatDistance(remaining)))
             append(" · ")
@@ -960,6 +965,7 @@ class NavigationActivity : Activity() {
 
         @JavascriptInterface
         fun onOpenGooglePlace(lat: Double, lng: Double) {
+            Log.d(TAG, "[navweb] onOpenGooglePlace lat=$lat lng=$lng")
             handler.post {
                 navMapWebView?.loadUrl(
                     "https://www.google.com/maps/search/?api=1&query=$lat,$lng"
@@ -1002,8 +1008,8 @@ class NavigationActivity : Activity() {
         private const val NOMINATIM = "https://nominatim.openstreetmap.org/search"
         private const val ONLINE_TTS_BASE =
             "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&q="
-        private const val USER_AGENT =
-            "GMaps-WV-Nav/2.0 (Android; +https://github.com/adegard/GMaps-WV-Nav)"
+        private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) " +
+            "Chrome/138.0.0.0 Mobile Safari/537.36"
         private const val REQUEST_LOCATION = 100
         private const val EARLY_TURN_M = 30.0
         private const val ARRIVE_THRESHOLD_M = 25.0
