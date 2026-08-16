@@ -116,6 +116,23 @@ class NavigationActivity : Activity() {
         setContentView(R.layout.activity_navigation)
         bindViews()
 
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            try {
+                val dir = getExternalFilesDir(null)
+                if (dir != null) {
+                    val f = java.io.File(dir, "crash.txt")
+                    f.appendText(
+                        "===== " + java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
+                            .format(java.util.Date()) + " =====\n" +
+                            Log.getStackTraceString(throwable) + "\n\n"
+                    )
+                }
+            } catch (_: Exception) {
+            }
+            defaultHandler?.uncaughtException(thread, throwable)
+        }
+
         tvInstruction?.setText(R.string.nav_status_locating)
 
         initMapView()
@@ -152,7 +169,7 @@ class NavigationActivity : Activity() {
         btnBackToMap = findViewById(R.id.btnBackToMap)
         btnVoice = findViewById(R.id.btnVoice)
         findViewById<Button>(R.id.btnDone).setOnClickListener { finish() }
-        findViewById<Button>(R.id.btnStop).setOnClickListener { finish() }
+        findViewById<ImageButton>(R.id.btnStop).setOnClickListener { finish() }
         findViewById<ImageButton>(R.id.btnZoomIn).setOnClickListener {
             evaluateJavascript("window.mapApi.zoomIn();")
         }

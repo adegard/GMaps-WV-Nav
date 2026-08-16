@@ -93,6 +93,23 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            try {
+                val dir = getExternalFilesDir(null)
+                if (dir != null) {
+                    val f = java.io.File(dir, "crash.txt")
+                    f.appendText(
+                        "===== " + java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
+                            .format(java.util.Date()) + " =====\n" +
+                            Log.getStackTraceString(throwable) + "\n\n"
+                    )
+                }
+            } catch (_: Exception) {
+            }
+            defaultHandler?.uncaughtException(thread, throwable)
+        }
+
         val urlToLoad = initialUrlFromIntent()
 
         // Create the WebView
@@ -124,6 +141,20 @@ class MainActivity : Activity() {
                     TAG,
                     "${message.message()} -- From line ${message.lineNumber()} of ${message.sourceId()}"
                 )
+                return true
+            }
+
+            override fun onCreateWindow(
+                view: WebView,
+                isDialog: Boolean,
+                isUserGesture: Boolean,
+                resultMsg: android.os.Message
+            ): Boolean {
+                // Open popups (e.g. place/POI cards) in the same WebView instead
+                // of silently dropping them when multi-window is unsupported.
+                val transport = resultMsg.obj as WebView.WebViewTransport
+                transport.webView = view
+                resultMsg.sendToTarget()
                 return true
             }
 
@@ -372,6 +403,7 @@ class MainActivity : Activity() {
                         return true // Deny URLs on DENYLIST
                     }
                 }
+                Log.d(TAG, "[nav] forward: " + request.url.toString())
                 return false
             }
         })
@@ -383,6 +415,7 @@ class MainActivity : Activity() {
             javaScriptEnabled = true
             cacheMode = WebSettings.LOAD_DEFAULT
             setGeolocationEnabled(true)
+            setSupportMultipleWindows(true)
             // Disable some WebView features
             allowContentAccess = false
             allowFileAccess = false
