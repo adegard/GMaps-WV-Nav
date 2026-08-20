@@ -7,6 +7,7 @@
 <style>
     html, body, #map { height: 100%; margin: 0; padding: 0; }
     #map { background: #aad3df; }
+    .leaflet-map-pane { transform-origin: 50% 75% !important; }
     .you-icon { background: transparent; border: none; pointer-events: none; }
     #carHud {
         position: fixed;
@@ -168,8 +169,10 @@ function applyHeading() {
     }
 }
 function centerOnMe() {
-    if (!currentPos) return;
-    map.setView(currentPos, map.getZoom(), { animate: false });
+    if (!currentPos || !followMode) return;
+    var s = map.getSize();
+    var offset = s.y > 10 ? [0, s.y * 0.25] : [0, 0];
+    map.setView(currentPos, Math.max(map.getZoom(), 16), { offset: offset, animate: false });
     applyHeading();
 }
 
@@ -220,7 +223,9 @@ window.mapApi = {
         followMode = true;
         applyCar();
         if (currentPos) {
-            map.setView(currentPos, Math.max(map.getZoom(), 16), { animate: false });
+            var s = map.getSize();
+            var offset = s.y > 10 ? [0, s.y * 0.25] : [0, 0];
+            map.setView(currentPos, Math.max(map.getZoom(), 16), { offset: offset, animate: false });
         }
         applyHeading();
     },
