@@ -7,13 +7,12 @@
 <style>
     html, body, #map { height: 100%; margin: 0; padding: 0; }
     #map { background: #aad3df; }
-    .leaflet-map-pane { transform-origin: 50% 75% !important; }
     .you-icon { background: transparent; border: none; pointer-events: none; }
     #carHud {
         position: fixed;
         left: 50%;
-        bottom: 25%;
-        transform: translate(-50%, 50%);
+        top: 50%;
+        transform: translate(-50%, -50%);
         width: 42px;
         height: 42px;
         z-index: 1100;
@@ -109,11 +108,28 @@ function applyCar() {
     }
 }
 
-map.on('dragstart', function () {
-    followMode = false;
-    applyCar();
-    var b = navBridge();
-    if (b) { try { b.setManualMode(); } catch (e) {} }
+var dragMoved = false;
+var dragStartPt = null;
+var DRAG_THRESHOLD = 24;
+
+map.on('dragstart', function (e) {
+    dragMoved = false;
+    dragStartPt = e.containerPoint ? [e.containerPoint.x, e.containerPoint.y] : null;
+});
+
+map.on('drag', function (e) {
+    if (dragMoved) return;
+    if (dragStartPt && e.containerPoint) {
+        var dx = e.containerPoint.x - dragStartPt[0];
+        var dy = e.containerPoint.y - dragStartPt[1];
+        if (dx * dx + dy * dy > DRAG_THRESHOLD * DRAG_THRESHOLD) {
+            dragMoved = true;
+            followMode = false;
+            applyCar();
+            var b = navBridge();
+            if (b) { try { b.setManualMode(); } catch (err) {} }
+        }
+    }
 });
 
 map.on('contextmenu', function (e) {
@@ -170,9 +186,7 @@ function applyHeading() {
 }
 function centerOnMe() {
     if (!currentPos || !followMode) return;
-    var s = map.getSize();
-    var offset = s.y > 10 ? [0, s.y * 0.25] : [0, 0];
-    map.setView(currentPos, Math.max(map.getZoom(), 16), { offset: offset, animate: false });
+    map.setView(currentPos, Math.max(map.getZoom(), 16), { animate: false });
     applyHeading();
 }
 
@@ -223,9 +237,7 @@ window.mapApi = {
         followMode = true;
         applyCar();
         if (currentPos) {
-            var s = map.getSize();
-            var offset = s.y > 10 ? [0, s.y * 0.25] : [0, 0];
-            map.setView(currentPos, Math.max(map.getZoom(), 16), { offset: offset, animate: false });
+            map.setView(currentPos, Math.max(map.getZoom(), 16), { animate: false });
         }
         applyHeading();
     },
