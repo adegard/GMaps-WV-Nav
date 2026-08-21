@@ -102,6 +102,7 @@ class NavigationActivity : Activity() {
     private var lastPosition: Pair<Double, Double>? = null
     private var lastBearing = 0f
     private var lastLocation: Location? = null
+    private var lastRerouteTime = 0L
 
     private val handler = Handler(Looper.getMainLooper())
 
@@ -550,6 +551,22 @@ class NavigationActivity : Activity() {
         }
     }
 
+    private fun reroute(location: Location) {
+        val dest = destination ?: return
+        routeReady = false
+        routeLoading = false
+        currentStepIndex = 0
+        lastAnnouncedStep = -1
+        approachActive = false
+        tvInstruction?.setText(R.string.nav_status_rerouting)
+        evaluateJavascript("window.mapApi.clearRoute();")
+        val start = location.latitude to location.longitude
+        lastPosition = start
+        routeLoading = true
+        val gen = ++routeGeneration
+        fetchRoute(start, dest, gen)
+    }
+
     private fun maybeFetchRoute() {
         if (routeLoading || routeReady) return
         val start = lastPosition ?: return
@@ -697,6 +714,18 @@ class NavigationActivity : Activity() {
         return bestAlong
     }
 
+    private fun distanceToRoute(lat: Double, lng: Double): Double {
+        if (routePoints.size < 2) return 0.0
+        var bestDist = Double.MAX_VALUE
+        for (i in 0 until routePoints.size - 1) {
+            val a = routePoints[i]
+            val b = routePoints[i + 1]
+            val (_, d) = projectToSegment(lat, lng, a, b)
+            if (d < bestDist) bestDist = d
+        }
+        return bestDist
+    }
+
     private fun projectToSegment(
         lat: Double,
         lng: Double,
@@ -784,6 +813,15 @@ class NavigationActivity : Activity() {
             }
         }
         tvSub?.text = sub
+
+        val offRouteDist = distanceToRoute(location.latitude, location.longitude)
+        if (offRouteDist > OFF_ROUTE_THRESHOLD_M) {
+            val now = System.currentTimeMillis()
+            if (now - lastRerouteTime > REROUTE_COOLDOWN_MS) {
+                lastRerouteTime = now
+                reroute(location)
+            }
+        }
     }
 
     private fun showStep(stepIndex: Int, nextManeuver: Double) {
@@ -1020,6 +1058,8 @@ class NavigationActivity : Activity() {
         private const val REQUEST_LOCATION = 100
         private const val EARLY_TURN_M = 30.0
         private const val ARRIVE_THRESHOLD_M = 25.0
+        private const val OFF_ROUTE_THRESHOLD_M = 50.0
+        private const val REROUTE_COOLDOWN_MS = 10000L
         private const val EXTRA_DESTINATION = "io.adegard.gmapsnav.extra.DESTINATION"
 
         private val COORD_REGEX =
