@@ -54,12 +54,6 @@ Downsides
   tracking without other data (cookies)
   - Manually clear app cache if necessary
 
-Security note
--------------
-The `signing/release.keystore` in this repository is used so that releases built
-by the workflow are reproducible and updatable. It is a personal throwaway key;
-keep the repository private or replace the key before wide distribution.
-
 Credits
 -------
 - @woheller69 for discovering that page loaded resources weren't being blocked
