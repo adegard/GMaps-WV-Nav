@@ -69,3 +69,7 @@ Credits
 License
 -------
 GNU AGPL-3.0, see [LICENSE](LICENSE).
+
+---
+
+For an overview of all my other projects, see https://adegard.github.io/blog/
