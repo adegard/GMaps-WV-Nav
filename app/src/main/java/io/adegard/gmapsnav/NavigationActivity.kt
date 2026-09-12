@@ -77,6 +77,7 @@ class NavigationActivity : Activity() {
     private var controlsPanel: android.view.View? = null
     private var btnBackToMap: ImageButton? = null
     private var btnVoice: ImageButton? = null
+    private var tvMirror: TextView? = null
     private var followUser = true
     private var headingUp = true
     private var voiceEnabled = true
@@ -103,6 +104,10 @@ class NavigationActivity : Activity() {
     private var lastBearing = 0f
     private var lastLocation: Location? = null
     private var lastRerouteTime = 0L
+    private var mirrorServer: MirrorServer? = null
+    private var mirrorInstruction = ""
+    private var mirrorDistance = ""
+    private var mirrorSub = ""
 
     private val handler = Handler(Looper.getMainLooper())
 
@@ -158,12 +163,14 @@ class NavigationActivity : Activity() {
         }
 
         ensureLocationPermission()
+        initMirror()
     }
 
     private fun bindViews() {
         tvInstruction = findViewById(R.id.tvInstruction)
         tvManeuverDistance = findViewById(R.id.tvManeuverDistance)
         tvSub = findViewById(R.id.tvSub)
+        tvMirror = findViewById(R.id.tvMirror)
         arrivalPanel = findViewById(R.id.arrivalPanel)
         tvArrivalAddress = findViewById(R.id.tvArrivalAddress)
         hudPanel = findViewById(R.id.hudPanel)
@@ -190,6 +197,49 @@ class NavigationActivity : Activity() {
         findViewById<ImageButton>(R.id.btnCompass).alpha = if (headingUp) 1f else 0.4f
         updateVoiceButton()
         updateChrome()
+    }
+
+    private fun initMirror() {
+        mirrorServer = MirrorServer(this)
+        mirrorServer?.start()
+        val url = mirrorServer?.url()
+        if (url != null) {
+            tvMirror?.text = getString(R.string.nav_car_screen, url)
+            tvMirror?.visibility = android.view.View.VISIBLE
+        } else {
+            tvMirror?.visibility = android.view.View.GONE
+        }
+    }
+
+    private fun updateMirrorState() {
+        val server = mirrorServer ?: return
+        try {
+            val obj = JSONObject()
+            lastPosition?.let { (lat, lng) ->
+                obj.put("lat", lat)
+                obj.put("lng", lng)
+            }
+            obj.put("bearing", lastBearing.toDouble())
+            val loc = lastLocation
+            obj.put("speedKmh", if (loc != null && loc.hasSpeed()) (loc.speed * 3.6).roundToInt() else -1)
+            val arr = JSONArray()
+            for (p in routePoints) {
+                arr.put(JSONArray().put(p.first).put(p.second))
+            }
+            obj.put("route", arr)
+            val dest = destination
+            if (dest != null) {
+                obj.put("dest", JSONArray().put(dest.first).put(dest.second))
+            }
+            obj.put("destLabel", destinationLabel)
+            obj.put("instruction", mirrorInstruction)
+            obj.put("distance", mirrorDistance)
+            obj.put("sub", mirrorSub)
+            obj.put("arrived", arrived)
+            server.state = obj.toString()
+        } catch (e: Exception) {
+            Log.w(TAG, "Mirror state update failed", e)
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -482,6 +532,8 @@ class NavigationActivity : Activity() {
         navMapWebView?.removeJavascriptInterface("NavBridge")
         navMapWebView?.loadUrl("about:blank")
         navMapWebView = null
+        mirrorServer?.stop()
+        mirrorServer = null
     }
 
     private fun hasLocationPermission(): Boolean {
@@ -550,6 +602,7 @@ class NavigationActivity : Activity() {
         if (routeReady && !arrived) {
             updateNavigation(location)
         }
+        updateMirrorState()
     }
 
     private fun reroute(location: Location) {
@@ -614,6 +667,7 @@ class NavigationActivity : Activity() {
                     tvArrivalAddress?.text = destinationLabel
                     maybeRenderRoute()
                     showStep(0, distanceToNextManeuver(0, 0.0))
+                    updateMirrorState()
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Route fetch failed", e)
@@ -814,6 +868,7 @@ class NavigationActivity : Activity() {
             }
         }
         tvSub?.text = sub
+        mirrorSub = sub
 
         val offRouteDist = distanceToRoute(location.latitude, location.longitude)
         if (offRouteDist > OFF_ROUTE_THRESHOLD_M) {
@@ -823,12 +878,18 @@ class NavigationActivity : Activity() {
                 reroute(location)
             }
         }
+        updateMirrorState()
     }
 
     private fun showStep(stepIndex: Int, nextManeuver: Double) {
         val step = steps.getOrNull(stepIndex) ?: return
-        tvInstruction?.text = buildInstruction(step)
-        tvManeuverDistance?.text = formatDistance(nextManeuver)
+        val instruction = buildInstruction(step)
+        tvInstruction?.text = instruction
+        val distText = formatDistance(nextManeuver)
+        tvManeuverDistance?.text = distText
+        mirrorInstruction = instruction
+        mirrorDistance = distText
+        updateMirrorState()
     }
 
     private fun announce(step: NavStep) {
@@ -846,6 +907,7 @@ class NavigationActivity : Activity() {
         tvSub?.text = destinationLabel
         vibrateArrival()
         speak(getString(R.string.nav_arrived))
+        updateMirrorState()
         // Re-center on the destination
         evaluateJavascript("window.mapApi.recenter();")
     }
@@ -1013,6 +1075,7 @@ class NavigationActivity : Activity() {
                 lastAnnouncedStep = -1
                 approachActive = false
                 followUser = true
+                updateMirrorState()
                 evaluateJavascript("window.mapApi.clearRoute();")
                 tvInstruction?.setText(R.string.nav_status_loading_route)
                 maybeFetchRoute()

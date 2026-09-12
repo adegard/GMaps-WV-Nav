@@ -242,6 +242,11 @@ window.mapApi = {
         ensureYouMarker();
         youMarker.setLatLng(currentPos);
         applyCar();
+        var el = youMarker.getElement();
+        if (el) {
+            var cs = el.querySelector('#carSvg');
+            if (cs) { cs.setAttribute('style', 'transform: rotate(' + bearing + 'deg)'); }
+        }
         if (headingUp) { setRotation(-bearing); }
         if (followMode) { centerOnMe(); }
     },

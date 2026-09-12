@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<link rel="stylesheet" href="leaflet.css">
+<style>
+    html, body, #map { height: 100%; margin: 0; padding: 0; }
+    #map { background: #aad3df; }
+    .car-icon { background: transparent; border: none; pointer-events: none; }
+    #hud {
+        position: fixed;
+        top: 0; left: 0; right: 0;
+        padding: 14px 16px;
+        background: rgba(8, 12, 16, 0.82);
+        color: #fff;
+        z-index: 1200;
+        font-family: sans-serif;
+        box-sizing: border-box;
+    }
+    #instr { font-size: 22px; font-weight: 600; line-height: 1.2; }
+    #dist { font-size: 28px; color: #80d8ff; font-weight: 700; margin-top: 2px; }
+    #sub { font-size: 14px; color: #b9c0c7; margin-top: 4px; }
+    #arrived {
+        position: fixed;
+        top: 36%; left: 12%; right: 12%;
+        background: rgba(33, 33, 33, 0.9);
+        color: #fff;
+        text-align: center;
+        padding: 28px 16px;
+        border-radius: 16px;
+        z-index: 1300;
+        font-size: 28px;
+        font-weight: 700;
+        display: none;
+        border: 2px solid #80d8ff;
+    }
+    #rot {
+        position: fixed;
+        bottom: 18px; right: 18px;
+        width: 56px; height: 56px;
+        border-radius: 50%;
+        border: none;
+        background: #1565c0;
+        color: #fff;
+        font-size: 14px;
+        font-weight: 700;
+        z-index: 1200;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+    }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="hud">
+    <div id="instr">Waiting for signal…</div>
+    <div id="dist"></div>
+    <div id="sub"></div>
+</div>
+<div id="arrived">You have arrived</div>
+<button id="rot">N</button>
+<script src="leaflet.js"></script>
+<script>
+var map = L.map('map', {
+    zoomControl: false, rotate: true, bearing: 0,
+    touchRotate: false, rotateControl: false
+}).setView([20, 0], 2);
+L.tileLayer('/api/tile/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: 'OpenStreetMap'
+}).addTo(map);
+
+var routeLine = null;
+var destMarker = null;
+var carMarker = null;
+var currentPos = null;
+var followMode = true;
+var headingUp = true;
+var lastBearing = 0;
+var lastRouteKey = "";
+var lastDestKey = "";
+
+function carIconFor(bearing) {
+    return L.divIcon({
+        className: 'car-icon',
+        html: '<svg width="44" height="44" viewBox="0 0 30 30" style="transform:rotate(' + bearing + 'deg)">' +
+            '<g transform="translate(15,15)">' +
+            '<path d="M0 -10.5 C-3.2 -10.5 -5.2 -8.8 -5.8 -7 L-8.6 4.5 C-9.2 6.6 -8.2 7.8 -6.6 8 L-6.6 9 L6.6 9 L6.6 8 C8.2 7.8 9.2 6.6 8.6 4.5 L5.8 -7 C5.2 -8.8 3.2 -10.5 0 -10.5 Z" fill="#1565c0" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>' +
+            '<path d="M-4.2 -8.3 C-4.2 -9.5 -3.1 -10.1 -1.8 -10.1 L1.8 -10.1 C3.1 -10.1 4.2 -9.5 4.2 -8.3 L3.3 -3.4 L-3.3 -3.4 Z" fill="#0d47a1"/>' +
+            '<rect x="-6.8" y="-5.8" width="1.8" height="1.5" rx="0.75" fill="#ffe082"/>' +
+            '<rect x="5" y="-5.8" width="1.8" height="1.5" rx="0.75" fill="#ffe082"/>' +
+            '<rect x="-5.4" y="4.5" width="2" height="2.6" rx="0.6" fill="#ff5252"/>' +
+            '<rect x="3.4" y="4.5" width="2" height="2.6" rx="0.6" fill="#ff5252"/>' +
+            '</g></svg>',
+        iconSize: [44, 44],
+        iconAnchor: [22, 22]
+    });
+}
+
+var destIcon = L.divIcon({
+    html: '<svg width="32" height="42" viewBox="0 0 32 42">' +
+        '<path d="M16 0 C7 0 0 7 0 16 C0 29 16 42 16 42 C16 42 32 29 32 16 C32 7 25 0 16 0 Z" fill="#d32f2f" stroke="#ffffff" stroke-width="2"/>' +
+        '<circle cx="16" cy="16" r="6" fill="#ffffff"/>' +
+        '</svg>',
+    iconSize: [32, 42],
+    iconAnchor: [16, 40]
+});
+
+var dragMoved = false;
+var dragStartPt = null;
+var DRAG_THRESHOLD = 24;
+map.on('dragstart', function (e) {
+    dragMoved = false;
+    dragStartPt = e.containerPoint ? [e.containerPoint.x, e.containerPoint.y] : null;
+});
+map.on('drag', function (e) {
+    if (dragMoved || !dragStartPt || !e.containerPoint) return;
+    var dx = e.containerPoint.x - dragStartPt[0];
+    var dy = e.containerPoint.y - dragStartPt[1];
+    if (dx * dx + dy * dy > DRAG_THRESHOLD * DRAG_THRESHOLD) {
+        dragMoved = true;
+        followMode = false;
+    }
+});
+
+function wrapAngle(a) {
+    a = a % 360;
+    if (a < 0) a += 360;
+    return a;
+}
+var currentBearing = 0;
+var targetBearing = 0;
+var rotating = false;
+function stepRotation() {
+    var diff = wrapAngle(targetBearing - currentBearing);
+    if (diff > 180) diff -= 360;
+    if (Math.abs(diff) < 0.6) {
+        currentBearing = targetBearing;
+        map.setBearing(currentBearing);
+        rotating = false;
+        return;
+    }
+    currentBearing = wrapAngle(currentBearing + diff * 0.25);
+    map.setBearing(currentBearing);
+    requestAnimationFrame(stepRotation);
+}
+function setRotation(deg) {
+    targetBearing = deg;
+    if (!rotating) {
+        rotating = true;
+        requestAnimationFrame(stepRotation);
+    }
+}
+
+function render(s) {
+    if (!s) return;
+    document.getElementById('instr').textContent = s.instruction || s.destLabel || 'Waiting for signal…';
+    document.getElementById('dist').textContent = s.distance || '';
+    document.getElementById('sub').textContent = s.sub || '';
+    document.getElementById('arrived').style.display = s.arrived ? 'block' : 'none';
+
+    if (s.route && s.route.length > 1) {
+        var key = s.route.map(function (p) { return p[0].toFixed(5) + ',' + p[1].toFixed(5); }).join('|');
+        if (key !== lastRouteKey) {
+            lastRouteKey = key;
+            if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+            var ll = s.route.map(function (p) { return [p[0], p[1]]; });
+            routeLine = L.polyline(ll, {
+                color: '#1565c0', weight: 6, opacity: 0.85, lineJoin: 'round'
+            }).addTo(map);
+        }
+    }
+
+    if (s.dest !== null && s.dest !== undefined) {
+        var dk = s.dest[0].toFixed(6) + ',' + s.dest[1].toFixed(6);
+        if (dk !== lastDestKey) {
+            lastDestKey = dk;
+            if (destMarker) { map.removeLayer(destMarker); destMarker = null; }
+            destMarker = L.marker([s.dest[0], s.dest[1]], { icon: destIcon, bubblingMouseEvents: false }).addTo(map);
+        }
+    }
+
+    if (s.lat !== null && s.lat !== undefined && s.lng !== null && s.lng !== undefined) {
+        currentPos = [s.lat, s.lng];
+        lastBearing = s.bearing || 0;
+        if (!carMarker) {
+            carMarker = L.marker(currentPos, {
+                icon: carIconFor(lastBearing),
+                zIndexOffset: 1000,
+                keyboard: false
+            }).addTo(map);
+        } else {
+            carMarker.setLatLng(currentPos);
+        }
+        if (headingUp) { setRotation(-lastBearing); }
+        if (followMode) {
+            map.setView(currentPos, Math.max(map.getZoom(), 16), { animate: false });
+        }
+    }
+}
+
+function tick() {
+    fetch('/api/state')
+        .then(function (r) { return r.json(); })
+        .then(render)
+        .catch(function () {})
+        .then(function () {
+            setTimeout(tick, 1000);
+        });
+}
+setTimeout(tick, 200);
+
+document.getElementById('rot').onclick = function () {
+    headingUp = !headingUp;
+    this.textContent = headingUp ? 'N' : 'H';
+    if (!headingUp) setRotation(0);
+};
+</script>
+</body>
+</html>

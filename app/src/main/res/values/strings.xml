@@ -20,6 +20,7 @@
     <string name="nav_status_locating">Locating…</string>
     <string name="nav_status_loading_route">Loading route…</string>
     <string name="nav_status_rerouting">Re-routing…</string>
+    <string name="nav_car_screen">Car screen: %1$s</string>
     <string name="nav_status_geocoding">Finding destination…</string>
     <string name="nav_status_no_fix">Waiting for GPS signal…</string>
     <string name="nav_status_no_permission">Location permission denied. Grant it in settings to use navigation.</string>
